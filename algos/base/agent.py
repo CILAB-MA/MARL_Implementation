@@ -2,10 +2,9 @@ import numpy as np
 import torch
 import torch.optim as optim
 
+
 class BaseAgent:
-
     def __init__(self, model, env_cfgs, model_cfgs, train_cfgs):
-
         self.model = model
         self.env_cfgs = env_cfgs
         self.model_cfgs = model_cfgs

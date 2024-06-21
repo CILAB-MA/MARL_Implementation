@@ -1,6 +1,7 @@
 import gym
 import rware
 
+
 def call_env():
     env = gym.make("rware-tiny-2ag-v1")
     obs = env.reset()

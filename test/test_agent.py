@@ -4,6 +4,7 @@ import os, sys
 sys.path.append(os.getcwd())
 from algos.base.agent import BaseAgent
 
+
 def test_random_agent(model, model_cfgs, train_cfgs):
     env = gym.make("rware-tiny-2ag-v1")
     obs = env.reset()

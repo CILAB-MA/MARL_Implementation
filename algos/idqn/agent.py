@@ -3,7 +3,7 @@ import torch
 import torch.optim as optim
 
 
-class IA2CAgent:
+class IDQNAgent:
     def __init__(self, model, env_cfgs, model_cfgs, train_cfgs):
         self.model = model
         self.env_cfgs = env_cfgs
