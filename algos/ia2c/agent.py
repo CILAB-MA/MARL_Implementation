@@ -1,11 +1,11 @@
 import numpy as np
 import torch
 import torch.optim as optim
-
-
+torch.distributions.categorical.Categorical
+from algos.ia2c.policies import ActorCriticPolicy
 class IA2CAgent:
     def __init__(self, model, env_cfgs, model_cfgs, train_cfgs):
-        self.model = model
+        self.model = ActorCriticPolicy(model_cfgs)
         self.env_cfgs = env_cfgs
         self.model_cfgs = model_cfgs
         self.train_cfgs = train_cfgs
@@ -13,7 +13,6 @@ class IA2CAgent:
     def update(self, storage):
         pass
 
-    def act(self, obs):
-        # actions = np.random.choice(self.env_cfgs['action_space'], self.env_cfgs['num_agent'])
-        actions = self.env_cfgs['action_space'].sample()
-        return actions
+    def act(self, obs, deterministic=False):
+        action = self.model.act(obs, deterministic=deterministic)
+        return action
