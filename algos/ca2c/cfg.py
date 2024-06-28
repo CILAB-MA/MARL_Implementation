@@ -6,7 +6,7 @@ model_cfgs = dict(
     gamma=0.99,
     entropy_coef=0.01,
     value_loss_coef=0.5,
-    centralised=False
+    centralised=True
 )
 
 train_cfgs = dict(
