@@ -10,6 +10,7 @@ model_cfgs = dict(
 )
 
 train_cfgs = dict(
+    use_wandb=True,
     total_timesteps=10,
     num_process=8
 )

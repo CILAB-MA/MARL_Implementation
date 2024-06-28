@@ -6,9 +6,17 @@ import torch
 from utils import envs_func
 from algos.ca2c.model import ActorCritic
 import numpy as np
-
+import wandb
+import yaml
 
 def train(cfgs):
+
+    if cfgs.train_cfgs['use_wandb']:
+        with open("private.yaml") as f:
+            private_info = yaml.load(f, Loader=yaml.FullLoader)
+        wandb.login(key=private_info["wandb_key"])
+        wandb.init(project=private_info["project"], entity=private_info["entity"],
+                   name='"centralised : {{{}}}'.format(cfgs.model_cfgs['centralised']))
 
     device = torch.device('cuda:0' if torch.cuda.is_available() else "cpu")
 
@@ -56,6 +64,8 @@ def train(cfgs):
 
         batch_obs[0, :, :] = batch_obs[-1, :, :]
         batch_done[0, :] = batch_done[-1, :]
-        print('epi_rewards', np.mean(epi_rewards))
+
+        if cfgs.train_cfgs['use_wandb']:
+            wandb.log({'epi_rewards': np.mean(epi_rewards)}, step=step)
 
     envs.close()
