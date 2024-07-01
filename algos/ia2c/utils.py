@@ -16,16 +16,18 @@ class RolloutBuffer(object):
         self.observations = np.zeros((self.buffer_size, self.num_process, self.num_agent, self.num_obss), dtype=np.float32)
         self.actions = np.zeros((self.buffer_size, self.num_process, self.num_agent), dtype=np.int16)
         self.rewards = np.zeros((self.buffer_size, self.num_process, self.num_agent), dtype=np.float16)
-        self.dones = np.zeros((self.buffer_size, self.num_process, self.num_agent), dtype=np.float32)
+        self.dones = np.zeros((self.buffer_size, self.num_process), dtype=np.float32)
         self.values = np.zeros((self.buffer_size, self.num_process, self.num_agent), dtype=np.float32)
         self.advantages = np.zeros((self.buffer_size, self.num_process, self.num_agent), dtype=np.float32)
-        self.log_probs = np.zeros((self.buffer_size, self.num_process, self.num_agent, self.num_action), dtype=np.float32)
+        self.log_probs = np.zeros((self.buffer_size, self.num_process, self.num_agent), dtype=np.float32)
         self.critic_target = np.zeros((self.buffer_size, self.num_process, self.num_agent), dtype=np.float32)
         self.pos = 0
 
     def add(self, obss, actions, rewards, dones, values, log_probs):
-        self.observations[self.pos] = obss.copy()
-        self.actions[self.pos] = actions.clone().cpu().numpy() # todo: torch로 넘어오는지 체크
+        obss_tmp = np.array([obs.copy() for obs in obss])
+        obss = obss_tmp.transpose(1, 0, 2)
+        self.observations[self.pos] = obss
+        self.actions[self.pos] = actions.copy()
         self.rewards[self.pos] = np.array(rewards).copy()
         self.dones[self.pos] = np.array(dones).copy()
         self.values[self.pos] = values.clone().cpu().numpy()
@@ -47,6 +49,33 @@ class RolloutBuffer(object):
             else:
                 next_non_terminal = 1 - self.dones[step + 1]
                 next_values = self.values[step + 1]
-            self.advantage[step] = self.rewards[step] + self.gamma * (1 - next_non_terminal) * next_values - self.values[step]
+            next_non_terminal = np.expand_dims(next_non_terminal, axis=-1)
+            next_non_terminal = np.tile(next_non_terminal, (1, 2))
+            self.advantages[step] = self.rewards[step] + self.gamma * (1 - next_non_terminal) * next_values - self.values[step]
             self.critic_target[step] = self.rewards[step] + self.gamma * (1 - next_non_terminal) * next_values
 
+    def swap_and_flatten(self, array):
+        shape = array.shape
+        return array.swapaxes(0, 1).reshape(shape[0] * shape[1], *shape[2:])
+
+    def get(self):
+        indices = np.random.permutation(self.buffer_size * self.num_process)
+        _tensor_names = [
+            "observations",
+            "actions",
+            "values",
+            "log_probs",
+            "advantages",
+            "critic_target",
+        ]
+
+        for tensor in _tensor_names:
+            self.__dict__[tensor] = self.swap_and_flatten(self.__dict__[tensor])
+            self.__dict__[tensor] = tr.from_numpy(self.__dict__[tensor])#.to(self.device)
+        data = (
+            self.observations[indices],
+            self.actions[indices],
+            self.advantages[indices],
+            self.critic_target[indices]
+        )
+        return data

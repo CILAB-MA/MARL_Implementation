@@ -1,6 +1,9 @@
 from algos import TRAINER
 from algos import CFGS
 import argparse
+import os
+os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 
 def parse_args():
