@@ -11,7 +11,7 @@ model_cfgs = dict(
 )
 train_cfgs = dict(
     device='cpu',
-    epochs=1000,
+    n_episodes=1000,
     target_update_freq=50
 )
 env_cfgs = dict(

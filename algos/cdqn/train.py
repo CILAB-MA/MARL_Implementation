@@ -31,7 +31,7 @@ def train(cfgs):
                     action_idx_dict=action_to_idx_dict,
                     action_space=env.action_space,
                     observation_space=env.observation_space,
-                    num_agents=env.n_agents)
+                    num_agent=env.n_agents)
     cfgs.env_cfgs.update(env_cfgs)
 
     model_cfgs = dict(obs_dim=env.observation_space[0].shape[0],
@@ -49,7 +49,7 @@ def train(cfgs):
     optimizer = optim.Adam(qnet.parameters(), lr=cfgs.model_cfgs['lr'])
 
     # Run the environment
-    for epoch in tqdm(range(cfgs.train_cfgs['epochs']), unit='epochs'):
+    for episode in tqdm(range(cfgs.train_cfgs['n_episodes']), unit='episode'):
         obs = env.reset()
         obs = [torch.tensor(ob, dtype=torch.float32) for ob in obs]
         obs = torch.cat(obs, dim=0)
@@ -73,11 +73,10 @@ def train(cfgs):
                 agent.update(replay_buffer, optimizer)
 
             # Update target
-            if epoch % cfgs.train_cfgs['target_update_freq'] == 0:
+            if episode % cfgs.train_cfgs['target_update_freq'] == 0:
                 agent.qnet_target.load_state_dict(agent.qnet.state_dict())
 
             obs = next_obs
             actions = agent.act(obs)
         agent.model_cfgs['epsilon'] *= agent.model_cfgs['epsilon_decay']
-        print(rewards)
     env.close()
