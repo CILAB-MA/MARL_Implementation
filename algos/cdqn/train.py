@@ -2,6 +2,7 @@ import gym
 from tqdm import tqdm
 import torch
 from torch import optim
+from torch.utils.tensorboard import SummaryWriter
 from itertools import product
 
 from algos.cdqn.agent import CDQNAgent
@@ -38,7 +39,8 @@ def train(cfgs):
                       joint_obs_dim=env.observation_space[0].shape[0] * env.n_agents,
                       hidden_dim=128,
                       action_dim=env.action_space[0].n,
-                      joint_action_dim=pow(env.action_space[0].n, env.n_agents))
+                      joint_action_dim=pow(env.action_space[0].n, env.n_agents),
+                      writer=SummaryWriter())
     cfgs.model_cfgs.update(model_cfgs)
 
     # Initialize the agent
@@ -49,14 +51,13 @@ def train(cfgs):
     optimizer = optim.Adam(qnet.parameters(), lr=cfgs.model_cfgs['lr'])
 
     # Run the environment
-    for episode in tqdm(range(cfgs.train_cfgs['n_episodes']), unit='episode'):
+    for episode in tqdm(range(1, cfgs.train_cfgs['n_episodes'] + 1), unit='episode'):
         obs = env.reset()
         obs = [torch.tensor(ob, dtype=torch.float32) for ob in obs]
         obs = torch.cat(obs, dim=0)
         actions = agent.act(obs)
         done = [False for _ in range(env.n_agents)]
         rewards = 0
-        # print(agent.model_cfgs['epsilon'])
 
         while not all(done):
             next_obs, reward, done, info = env.step(actions)
@@ -72,11 +73,17 @@ def train(cfgs):
             if len(replay_buffer) == cfgs.model_cfgs['buffer_size']:
                 agent.update(replay_buffer, optimizer)
 
-            # Update target
-            if episode % cfgs.train_cfgs['target_update_freq'] == 0:
-                agent.qnet_target.load_state_dict(agent.qnet.state_dict())
-
             obs = next_obs
             actions = agent.act(obs)
-        agent.model_cfgs['epsilon'] *= agent.model_cfgs['epsilon_decay']
+
+        # Update target
+        if episode % 2 == 0:
+            agent.qnet_target.load_state_dict(agent.qnet.state_dict())
+
+        # Epsilon decay
+        agent.decay_epsilon(episode, cfgs.train_cfgs['n_episodes'])
+
+        # Log the rewards
+        cfgs.model_cfgs['writer'].add_scalar('reward', rewards, episode)
+
     env.close()
