@@ -7,7 +7,6 @@ class QNet(nn.Module):
     def __init__(self, model_cfg) -> None:
         super(QNet, self).__init__()
         
-        
         self.actor_net = FCNet(model_cfg['obs_space'], model_cfg['act_space'], model_cfg['hidden_dim'])
         self.target_net = FCNet(model_cfg['obs_space'], model_cfg['act_space'], model_cfg['hidden_dim'])
         self.update_target_net()

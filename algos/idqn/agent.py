@@ -4,6 +4,7 @@ import random
 import torch
 import torch.optim as optim
 import torch.nn.functional as F
+from torch.distributions import Categorical
 
 from algos.idqn.model import QNet
 from algos.idqn.replay_buffer import ReplayBuffer
@@ -16,12 +17,12 @@ class IDQNAgent:
         self.train_cfgs = train_cfgs
         
         
-        self.epsilon = train_cfgs['epsilon_start']
+        self.epsilon = train_cfgs['epsilon']
         self.gamma = train_cfgs['gamma']
-        
+        self.device = model_cfgs['device']
     
-        self.models = [QNet(self.model_cfgs) for _ in range(self.env_cfgs['num_agent'])]
-        self.replay_buffers = [ReplayBuffer(train_cfgs['replay_buffer_size']) for _ in range(self.env_cfgs['num_agent'])]
+        self.models = [QNet(self.model_cfgs).to(self.device) for _ in range(self.env_cfgs['num_agent'])]
+        self.replay_buffers = [ReplayBuffer(train_cfgs['replay_buffer_size'], self.model_cfgs)  for _ in range(self.env_cfgs['num_agent'])]
         self.optimizers = [optim.Adam(model.parameters(), lr=self.model_cfgs['lr']) for model in self.models]
     
     def update_buffer(self, obss, actions, rewards, next_obss, dones):
@@ -48,13 +49,19 @@ class IDQNAgent:
         actions = []
         for idx, model in enumerate(self.models):
             obs = obss[idx]
-            if random.random() < self.epsilon:
-                action = torch.tensor([random.randrange(self.model_cfgs['act_space'])], device=obs.device)
-            else:
-                q_vals = model(obs)
-                action = q_vals.argmax()
-            actions.append(action)
-        return torch.stack(actions)
+            model_actions = []
+            for env_idx in range(obs.shape[0]):
+                if random.random() < self.epsilon:
+                    action = torch.tensor(random.randrange(self.model_cfgs['act_space']), device=obs.device)
+                else:
+                    q_vals = model(obs[env_idx].unsqueeze(0))
+                    probabilities = torch.softmax(q_vals, dim=-1)
+                    action = Categorical(probabilities).sample()
+                model_actions.append(action)
+            actions.append(torch.stack(model_actions))
+        actions = torch.stack(actions)
+        actions = actions.t()
+        return actions
     
     def replay_buffer_size(self):
         return len(self.replay_buffers[0])  

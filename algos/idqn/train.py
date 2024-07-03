@@ -18,13 +18,14 @@ def train(cfgs):
     obss = envs.reset()
     
     env_cfgs['num_agent'] = len(obss)
-    env_cfgs['act_space'] = envs.action_space.n
-    env_cfgs['obs_space'] = envs.observation_space.shape[0]
+    model_cfgs['act_space'] = envs.action_space[0].n
+    model_cfgs['obs_space'] = envs.observation_space[0].shape[0]
     
     agent = IDQNAgent(None, env_cfgs, model_cfgs, train_cfgs)
     
     t = 0
     for _ in tqdm(range(train_cfgs['total_timesteps'])):
+        obss = torch.tensor(obss, device=device)
         actions = agent.act(obss)
         next_obss, rewards, dones, infos = envs.step(actions)
         
@@ -36,6 +37,7 @@ def train(cfgs):
             
         if t % train_cfgs['target_update_interval'] == 0:
             agent.update_target()
+        
         t += 1
         
     print('Train completed!!')
