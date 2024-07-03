@@ -41,3 +41,9 @@ class CDQNAgent:
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
+
+    def decay_epsilon(self, episode, total_episode):
+        if self.model_cfgs['epsilon'] > 0.1:
+            self.model_cfgs['epsilon'] = 1 - 3 / total_episode * episode
+        else:
+            self.model_cfgs['epsilon'] = 0.1
