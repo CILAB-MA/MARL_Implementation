@@ -22,7 +22,7 @@ class RolloutBuffer(object):
         self.log_probs = np.zeros((self.buffer_size, self.num_process, self.num_agent), dtype=np.float32)
         self.critic_target = np.zeros((self.buffer_size, self.num_process, self.num_agent), dtype=np.float32)
         self.pos = 0
-
+        self.full = False
     def add(self, obss, actions, rewards, dones, values, log_probs):
         obss_tmp = np.array([obs.copy() for obs in obss])
         obss = obss_tmp.transpose(1, 0, 2)
@@ -34,7 +34,8 @@ class RolloutBuffer(object):
         self.log_probs[self.pos] = log_probs.clone().cpu().numpy()
 
         self.pos += 1
-
+        if self.pos == self.buffer_size - 1:
+            self.full =True
     def compute_advantage(self, next_values, dones):
         '''
         rollout step이 꽉차면 돈다
@@ -79,3 +80,29 @@ class RolloutBuffer(object):
             self.critic_target[indices]
         )
         return data
+
+def print_square(dictionary):
+    for key in dictionary.keys():
+        if "float" in str(type(dictionary[key])):
+            newval = round(float(dictionary[key]), 6)
+            dictionary[key] = newval
+        elif "list" in str(type(dictionary[key])):
+            dictionary[key] = str(dictionary[key])
+    front_lens = []
+    back_lens = []
+    for key in dictionary.keys():
+        front_lens.append(len(key))
+        back_lens.append(len(str(dictionary[key])))
+    front_len = max(front_lens)
+    back_len = max(back_lens)
+
+    strings = []
+    for key in dictionary.keys():
+        string = "| {0:<{2}} | {1:<{3}} |".format(key, dictionary[key], front_len, back_len)
+        strings.append(string)
+
+    max_len = max([len(i) for i in strings])
+    print("-"*max_len)
+    for string in strings:
+        print(string)
+    print("-" * max_len)

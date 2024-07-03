@@ -44,7 +44,8 @@ class IA2CAgent:
         self.models[1].policy_optimizer.zero_grad()
         policy_loss_1.backward()
         self.models[1].policy_optimizer.step()
-
+        return [value_loss_0.item(), value_loss_1.item()], \
+               [policy_loss_0.item(), policy_loss_1.item()]
     def act(self, obss, deterministic=False):
         with tr.no_grad():
             total_actions = tr.zeros(self.num_process, self.num_agent)
@@ -52,7 +53,6 @@ class IA2CAgent:
             for i in range(self.num_agent):
                 obs = tr.from_numpy(obss[i])
                 action, log_prob = self.models[i].act(obs, deterministic=deterministic)
-                print(action, log_prob)
                 total_actions[:, i] = action
                 total_log_probs[:, i] = log_prob
         total_actions = total_actions.numpy()

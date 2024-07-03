@@ -16,7 +16,7 @@ class ActorCriticPolicy:
         self.policy_optimizer = optim.Adam(self.actor.parameters(), lr=0.0005)
 
     def act(self, obss, deterministic=False):
-        logits = F.softmax(self.actor(obss))
+        logits = F.softmax(self.actor(obss), dim=-1)
         dist = Categorical(logits)
         if deterministic:
             action = dist.mode()
