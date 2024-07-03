@@ -41,6 +41,9 @@ class ActorCritic(nn.Module):
 
         self.actor = model_func.MultiAgentFCNetwork(obs_shape, [64, 64], action_shape, True)
         self.critic = model_func.MultiAgentFCNetwork(critic_obs_shape, [64, 64], [1] * self.n_agents, True)
+        self.target_critic = model_func.MultiAgentFCNetwork(critic_obs_shape, [64, 64], [1] * self.n_agents, True)
+
+        self.soft_update(1.0)
         self.to(device)
 
         optimizer = getattr(optim, cfg.model_cfgs['optimizer'])
@@ -50,6 +53,7 @@ class ActorCritic(nn.Module):
 
         lr = cfg.model_cfgs['lr']
         self.optimizer = optimizer(self.parameters(), lr=lr)
+        self.target_update_interval_or_tau = 200
 
         self.split_obs = _split_batch([flatdim(s) for s in obs_space])
         self.split_act = _split_batch(self.n_agents * [1])
@@ -81,6 +85,12 @@ class ActorCritic(nn.Module):
 
         return torch.cat(self.critic(inputs), dim=-1)
 
+    def get_target_value(self, inputs):
+        if self.centralised_critic:
+            inputs = self.n_agents * [torch.cat(inputs, dim=-1)]
+
+        return torch.cat(self.target_critic(inputs), dim=-1)
+
     def evaluate_actions(self, inputs, action, action_mask=None, state=None):
         if not state:
             state = inputs
@@ -97,9 +107,14 @@ class ActorCritic(nn.Module):
             dist_entropy,
         )
 
+    def soft_update(self, t):
+        source, target = self.critic, self.target_critic
+        for target_param, source_param in zip(target.parameters(), source.parameters()):
+            target_param.data.copy_((1 - t) * target_param.data + t * source_param.data)
+
     def update(self, batch_obs, batch_act, batch_rew, batch_done, step):
         with torch.no_grad():
-            next_value = self.get_value(self.split_obs(batch_obs[self.n_steps, :, :]))
+            next_value = self.get_target_value(self.split_obs(batch_obs[self.n_steps, :, :]))
 
         returns = compute_returns(batch_rew, batch_done, next_value, self.gamma)
 
@@ -122,3 +137,8 @@ class ActorCritic(nn.Module):
         loss.backward()
 
         self.optimizer.step()
+
+        if self.target_update_interval_or_tau > 1.0 and step % self.target_update_interval_or_tau == 0:
+            self.soft_update(1.0)
+        elif self.target_update_interval_or_tau < 1.0:
+            self.soft_update(self.target_update_interval_or_tau)
