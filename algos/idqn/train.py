@@ -1,11 +1,15 @@
 from tqdm import tqdm
 from algos.idqn.agent import IDQNAgent
 
-from utils.envs_func import VecRware, RwareWrapper, SquashRewards
+from utils.envs_func import VecRware, RwareWrapper
+from stable_baselines3.common.vec_env import VecMonitor, VecVideoRecorder
+
 import torch
 
 import gym
-import os
+import os, json
+import wandb
+import numpy as np
 
 import datetime
 
@@ -14,10 +18,17 @@ def train(cfgs):
     env_cfgs = cfgs.env_cfgs
     model_cfgs = cfgs.model_cfgs
     
-    save_dir = f"./runs/idqn/{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
+    run_name = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+    save_dir = f"./runs/idqn/{run_name}"
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
-        
+    
+    wandb_run = start_wandb()
+    wandb_run.name = run_name
+    wandb.config.update(env_cfgs)
+    wandb.config.update(model_cfgs)
+    wandb.config.update(train_cfgs)
+    
     device = torch.device('cuda:0' if torch.cuda.is_available() else "cpu")
     model_cfgs['device'] = device
     
@@ -25,9 +36,8 @@ def train(cfgs):
     envs = RwareWrapper(envs)
     
     test_env = gym.make("rware-tiny-2ag-v1")
-    
-    if env_cfgs['central_reward']:
-        envs = SquashRewards(envs)
+
+
     obss = envs.reset()    
     test_obs = test_env.reset()
     
@@ -36,7 +46,9 @@ def train(cfgs):
     env_cfgs['obs_space'] = envs.observation_space[0].shape[0]
     
     agent = IDQNAgent(None, env_cfgs, model_cfgs, train_cfgs)
-    train_reward_sum = 0.0
+    
+
+    train_reward_sum = [0., 0.]
     train_reward_avg = 0.0
     test_rewards_sum = 0.0
 
@@ -46,10 +58,15 @@ def train(cfgs):
         actions = agent.act(obss_tensor)
         
         next_obss, rewards, dones, infos = envs.step(actions)
-        is_full = agent.update_buffer(obss, actions, rewards, next_obss, dones)
+        if env_cfgs['central_reward']:
+            rewards_sum = np.sum(rewards, axis=1, keepdims=True)
+            rewards_sum  = np.full(rewards.shape, rewards_sum )
+        else:
+            rewards_sum = rewards
+        is_full = agent.update_buffer(obss, actions, rewards_sum, next_obss, dones)
         
 
-        train_reward_sum += rewards.sum()
+        train_reward_sum += rewards.sum(axis=0)
         if is_full:
             agent.update()
             obss = next_obss
@@ -59,12 +76,13 @@ def train(cfgs):
             
         if dones[0] == True:
             train_reward_avg = train_reward_sum / train_cfgs['num_process']
-            train_reward_sum = 0.0
+            wandb.log(step=t ,data={"train_reward": train_reward_avg.sum(), "epsilon": agent.epsilon_scheduler.get_epsilon(), "buffer_size": agent.replay_buffer.buffer_size if agent.replay_buffer.is_full() else agent.replay_buffer.pos, "train_reward_0": train_reward_avg[0], "train_reward_1": train_reward_avg[1]})
+            train_reward_sum = [0., 0.]
         p_bar.set_description(f"[{t:>03d} iter]: train_rewards: {train_reward_avg}, epsilon: {agent.epsilon_scheduler.get_epsilon():.3f}")
         
         if t % train_cfgs['save_interval'] == 0 and t > 0:
             agent.save_agent(os.path.join(save_dir, f"model_{t}_{train_reward_avg}.pt"))
-        
+                
         if t % train_cfgs['test_interval'] == 0 and t > 0:
             with torch.no_grad():
                 test_done = False
@@ -79,11 +97,18 @@ def train(cfgs):
                     test_env.render()
                 test_env.reset()  
             print(f"test reward: {test_rewards_sum}")
-    agent.save_agent(save_dir, os.path.join(save_dir, f"model_final_{train_reward_avg}.pt"))
+    agent.save_agent(os.path.join(save_dir, f"model_final_{train_reward_avg}.pt"))
           
        
     print('Train completed!!')
 
+
+def start_wandb():
+    with open('./wandb_key.json', 'r') as f:
+        wandb_key = json.load(f)
+    wandb.login(key=wandb_key["wandb_key"])
+    run = wandb.init(project='rware', entity="224lsy", monitor_gym=True)
+    return run
 
 #================
 # Pseudo code
