@@ -6,7 +6,9 @@ import gym
 import rware
 from stable_baselines3.common.vec_env import SubprocVecEnv, VecEnvWrapper
 import os
-
+from typing import Optional, Tuple
+import numpy as np
+import time
 
 class VecRware(SubprocVecEnv):
     def __init__(self, num_envs, env_name):
