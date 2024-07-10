@@ -1,36 +1,52 @@
-from algos.ia2c.model import MLPNetwork
+
 from torch.distributions.categorical import Categorical
-import torch.nn.functional as F
 import torch.optim as optim
-class ActorCriticPolicy:
+from utils.model_func import MultiAgentFCNetwork, MultiCategorical
+import torch.nn as nn
+import torch as tr
+from gym.spaces import flatdim
+
+class ActorCriticPolicy(nn.Module):
 
     def __init__(self, model_cfg):
-        self.actor = MLPNetwork(model_cfg['num_obss'],
-                                num_output=model_cfg['num_action'],
-                                num_hidden=model_cfg['num_hidden'])
-        self.critic = MLPNetwork(model_cfg['num_obss'],
-                                num_output=1,
-                                num_hidden=model_cfg['num_hidden'])
+        super(ActorCriticPolicy, self).__init__()
+        obs_shape = [flatdim(o) for o in model_cfg['observation_space']]
+        action_shape = [flatdim(a) for a in model_cfg['action_space']]
+        self.actor = MultiAgentFCNetwork(obs_shape,
+                                         [64, 64],
+                                         action_shape, True)
+        self.critic = MultiAgentFCNetwork(obs_shape,
+                                         [64, 64], [1] * model_cfg['num_agent'], True)
 
-        self.critic_optimizer = optim.Adam(self.critic.parameters(), lr=0.0005)
-        self.policy_optimizer = optim.Adam(self.actor.parameters(), lr=0.0005)
+        optimizer = getattr(optim, 'Adam')
+        if type(optimizer) is str:
+            optimizer = getattr(optim, optimizer)
+        self.optimizer = optimizer(self.parameters(), lr=3.e-4)
 
     def act(self, obss, deterministic=False):
-        logits = F.softmax(self.actor(obss), dim=-1)
-        dist = Categorical(logits)
+        actor_features = self.actor(obss)
+        action_mask = len(actor_features) * [0]
+        dist = MultiCategorical(
+            [Categorical(logits=x + s) for x, s in zip(actor_features, action_mask)]
+        )
         if deterministic:
             action = dist.mode()
         else:
             action = dist.sample()
-        log_prob = dist.log_prob(action)
+
+        log_prob = dist.log_probs(action)
 
         return action, log_prob
 
     def get_log_prob(self, obss, action):
-        logits = F.softmax(self.actor(obss), dim=-1)
-        dist = Categorical(logits)
-        log_prob = dist.log_prob(action)
+        actor_features = self.actor(obss)
+        action_mask = len(actor_features) * [0]
+        dist = MultiCategorical(
+            [Categorical(logits=x + s) for x, s in zip(actor_features, action_mask)]
+        )
+        log_prob = dist.log_probs(action)
+        # print('log prob', action[0].shape, log_prob[0].shape, actor_features[0].shape)
         return log_prob
 
     def get_value(self, obss):
-        return self.critic(obss)
+        return tr.cat(self.critic(obss), dim=-1)

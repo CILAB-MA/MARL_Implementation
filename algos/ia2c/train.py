@@ -1,4 +1,4 @@
-from tqdm import tqdm
+import wandb, yaml
 from algos.ia2c.agent import IA2CAgent
 import numpy as np
 from utils.envs_func import VecRware, RwareWrapper, RwareMonitor
@@ -8,22 +8,26 @@ def train(cfgs): # todo: config 맞춰 만들어주기
     train_cfgs = cfgs.train_cfgs
     env_cfgs = cfgs.env_cfgs
     model_cfgs = cfgs.model_cfgs
+    # if cfgs.train_cfgs['use_wandb']:
+    #     with open("private.yaml") as f:
+    #         private_info = yaml.load(f, Loader=yaml.FullLoader)
+    #     wandb.login(key=private_info["wandb_key"])
+    #     wandb.init(project=private_info["project"], entity=private_info["entity"],
+    #                name='"ia2c : {{{}}}'.format(cfgs.model_cfgs['centralised']))
     t = 0
     envs = VecRware(train_cfgs['num_process'], "rware-tiny-2ag-v1") #agent 2
-    envs = RwareMonitor(envs)
     envs = RwareWrapper(envs)
     obss = envs.reset()
     num_obss = envs.observation_space[0].shape[-1]
-    model_cfgs['num_obss'] = num_obss
-    model_cfgs['num_action'] = envs.action_space[0].n
+    model_cfgs['observation_space'] = envs.observation_space
+    model_cfgs['action_space'] = envs.action_space
     agent = IA2CAgent(None, env_cfgs, model_cfgs, train_cfgs)
     storage = RolloutBuffer(num_agent=env_cfgs['num_agent'],
-                            num_obss=model_cfgs['num_obss'],
+                            num_obss=num_obss,
                             buffer_size=train_cfgs['rollout_step'],
                             num_process=train_cfgs['num_process'],
                             device=train_cfgs['device'])
     storage.reset()
-    print(train_cfgs, env_cfgs, model_cfgs)
     iter_num = int(train_cfgs['total_timesteps'] / train_cfgs['num_process'])
     log_dict = dict(episode_reward=[], value_loss=[], policy_loss=[])
     for n in range(iter_num):
@@ -32,7 +36,7 @@ def train(cfgs): # todo: config 맞춰 만들어주기
         next_obss, rews, dones, infos = envs.step(actions)
         storage.add(obss, actions, rews, dones, values, log_probs)
         t += train_cfgs['num_process']
-        episode_reward = [info['episode']['r'] for info in infos if len(info) != 0]
+        episode_reward = [info['episode_returns'] for info in infos if len(info) != 0]
         if len(episode_reward) != 0:
             log_dict['episode_reward'].append(np.mean(episode_reward))
         if storage.full:
