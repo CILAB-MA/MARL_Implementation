@@ -1,3 +1,8 @@
+# directories
 .idea/
 __pycache__/
 runs/
+wandb/
+
+# files
+private.yaml
