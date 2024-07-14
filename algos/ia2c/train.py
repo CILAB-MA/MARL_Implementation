@@ -3,6 +3,7 @@ from algos.ia2c.agent import IA2CAgent
 import numpy as np
 from utils.envs_func import VecRware, RwareWrapper, RwareMonitor
 from algos.ia2c.utils import RolloutBuffer, print_square
+from collections import deque
 
 def train(cfgs): # todo: config 맞춰 만들어주기
     train_cfgs = cfgs.train_cfgs
@@ -30,15 +31,16 @@ def train(cfgs): # todo: config 맞춰 만들어주기
     storage.reset()
     iter_num = int(train_cfgs['total_timesteps'] / train_cfgs['num_process'])
     log_dict = dict(episode_reward=[], value_loss=[], policy_loss=[])
+    epi_rewards = deque(maxlen=20)
     for n in range(iter_num):
         actions, log_probs = agent.act(obss)
         values = agent.get_value(obss)
         next_obss, rews, dones, infos = envs.step(actions)
         storage.add(obss, actions, rews, dones, values, log_probs)
         t += train_cfgs['num_process']
-        episode_reward = [info['episode_returns'] for info in infos if len(info) != 0]
-        if len(episode_reward) != 0:
-            log_dict['episode_reward'].append(np.mean(episode_reward))
+        for info in infos:
+            if "episode_returns" in info:
+                epi_rewards.append(sum(info["episode_returns"]))
         if storage.full:
             next_values = agent.get_value(next_obss)
             storage.compute_advantage(next_values, dones)
@@ -50,6 +52,7 @@ def train(cfgs): # todo: config 맞춰 만들어주기
             for log in log_dict.keys():
                 log_dict[log] = np.mean(log_dict[log])
             log_dict['timestep'] = t
+            log_dict['episode_reward'] = np.mean(epi_rewards)
             print_square(log_dict)
             log_dict = dict(episode_reward=[], value_loss=[], policy_loss=[])
         obss = next_obss
