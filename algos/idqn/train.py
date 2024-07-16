@@ -18,16 +18,18 @@ def train(cfgs):
     env_cfgs = cfgs.env_cfgs
     model_cfgs = cfgs.model_cfgs
     
+    use_wandb = train_cfgs['use_wandb']
+    
     run_name = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
     save_dir = f"./runs/idqn/{run_name}"
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
-    
-    wandb_run = start_wandb()
-    wandb_run.name = run_name
-    wandb.config.update(env_cfgs)
-    wandb.config.update(model_cfgs)
-    wandb.config.update(train_cfgs)
+    if use_wandb:
+        wandb_run = start_wandb()
+        wandb_run.name = f"idqn_{run_name}"
+        wandb.config.update(env_cfgs)
+        wandb.config.update(model_cfgs)
+        wandb.config.update(train_cfgs)
     
     device = torch.device('cuda:0' if torch.cuda.is_available() else "cpu")
     model_cfgs['device'] = device
@@ -42,14 +44,16 @@ def train(cfgs):
     test_obs = test_env.reset()
     
     env_cfgs['num_agent'] = len(obss)
-    env_cfgs['act_space'] = envs.action_space[0].n
-    env_cfgs['obs_space'] = envs.observation_space[0].shape[0]
+    env_cfgs['act_space'] = [act_space.n for act_space in envs.action_space]
+    env_cfgs['obs_space'] = [env_space.shape[0] for env_space in envs.observation_space]
+
     
     agent = IDQNAgent(None, env_cfgs, model_cfgs, train_cfgs)
     
 
     train_reward_sum = [0., 0.]
-    train_reward_avg = 0.0
+    train_reward_avg = [0., 0.]
+    train_reward_avg_history = [[0.,0.]]
     test_rewards_sum = 0.0
 
     p_bar = tqdm(range(int(train_cfgs['total_timesteps']/train_cfgs['num_process'])))
@@ -70,25 +74,31 @@ def train(cfgs):
         if is_full:
             agent.update()
             obss = next_obss
-            
-        if t % train_cfgs['target_update_interval'] == 0:
-            agent.update_target()
+
             
         if dones[0] == True:
             train_reward_avg = train_reward_sum / train_cfgs['num_process']
-            wandb.log(step=t ,data={"train_reward": train_reward_avg.sum(), "epsilon": agent.epsilon_scheduler.get_epsilon(), "buffer_size": agent.replay_buffer.buffer_size if agent.replay_buffer.is_full() else agent.replay_buffer.pos, "train_reward_0": train_reward_avg[0], "train_reward_1": train_reward_avg[1]})
+            train_reward_avg_history.append(train_reward_avg)
+            if use_wandb:
+                wandb.log(step=t ,data={"epi_rewards": train_reward_avg.sum()})
+                wandb.log(step=t ,data={"epsilon": agent.epsilon_scheduler.get_epsilon()})
+                wandb.log(step=t ,data={"buffer_size": agent.replay_buffer.buffer_size if agent.replay_buffer.is_full() else agent.replay_buffer.pos})
+                wandb.log(step=t ,data={"epi_reward(agent0)": train_reward_avg[0]})
+                wandb.log(step=t ,data={"epi_reward(agent1)": train_reward_avg[1]})
+                wandb.log(step=t ,data={"loss": agent.get_mean_loss()})
             train_reward_sum = [0., 0.]
-        p_bar.set_description(f"[{t:>03d} iter]: train_rewards: {train_reward_avg}, epsilon: {agent.epsilon_scheduler.get_epsilon():.3f}")
+        p_bar.set_description(f"[{t:>03d} iter]: train_rewards: {np.mean(train_reward_avg_history,axis=0)}, epsilon: {agent.epsilon_scheduler.get_epsilon():.3f}")
         
         if t % train_cfgs['save_interval'] == 0 and t > 0:
             agent.save_agent(os.path.join(save_dir, f"model_{t}_{train_reward_avg}.pt"))
                 
         if t % train_cfgs['test_interval'] == 0 and t > 0:
+            train_reward_avg_history = [[0.,0.]]
             with torch.no_grad():
                 test_done = False
                 test_rewards_sum = 0
                 while not test_done:
-                    test_obs_tensor = torch.tensor(test_obs, device=device)
+                    test_obs_tensor = torch.tensor(test_obs, device=device).unsqueeze(1)
                     test_action = agent.act(test_obs_tensor).squeeze()
                     test_next_obs, test_reward, test_done, test_info = test_env.step(test_action)
                     test_done = test_done[0]
