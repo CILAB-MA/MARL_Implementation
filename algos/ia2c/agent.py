@@ -7,22 +7,22 @@ class IA2CAgent:
         self.model = ActorCriticPolicy(model_cfgs)
         self.num_agent = env_cfgs['num_agent']
         self.num_process = train_cfgs['num_process']
-        self.num_action = model_cfgs['action_space'][0].n
         self.env_cfgs = env_cfgs
         self.model_cfgs = model_cfgs
         self.train_cfgs = train_cfgs
         self.device = train_cfgs['device']
+
 
     def update(self, storage):
         data = storage.get()
         obss, acts, advs, cri_tar = data
         acts = acts.long()
         vals, log_probs = self.evaluate_action(obss, acts)
+        print(acts,advs)
         advs = (advs - advs.mean()) / (advs.std() + 1e-8)
-        policy_loss = -(advs * log_probs).mean()
-
-        value_loss = F.mse_loss(vals, cri_tar)
-        loss = policy_loss + value_loss
+        policy_loss = -(advs.detach() * log_probs).sum(dim=-1).mean()
+        value_loss = (vals - cri_tar.detach()).pow(2).sum(dim=-1).mean()
+        loss = policy_loss + 0.5 * value_loss
         self.model.optimizer.zero_grad()
         loss.backward()
         self.model.optimizer.step()
@@ -49,5 +49,4 @@ class IA2CAgent:
         acts = acts.transpose(0, 1)
         value = self.model.get_value(obss)
         log_prob = self.model.get_log_prob(obss, acts)
-        log_prob = tr.cat(log_prob, dim=-1)
         return value, log_prob

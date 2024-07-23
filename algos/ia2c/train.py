@@ -1,4 +1,5 @@
 import wandb, yaml
+import rware
 from algos.ia2c.agent import IA2CAgent
 import numpy as np
 from utils.envs_func import VecRware, RwareWrapper, RwareMonitor
@@ -9,19 +10,19 @@ def train(cfgs): # todo: config 맞춰 만들어주기
     train_cfgs = cfgs.train_cfgs
     env_cfgs = cfgs.env_cfgs
     model_cfgs = cfgs.model_cfgs
-    # if cfgs.train_cfgs['use_wandb']:
-    #     with open("private.yaml") as f:
-    #         private_info = yaml.load(f, Loader=yaml.FullLoader)
-    #     wandb.login(key=private_info["wandb_key"])
-    #     wandb.init(project=private_info["project"], entity=private_info["entity"],
-    #                name='"ia2c : {{{}}}'.format(cfgs.model_cfgs['centralised']))
+    if cfgs.train_cfgs['use_wandb']:
+        with open("private.yaml") as f:
+            private_info = yaml.load(f, Loader=yaml.FullLoader)
+        wandb.login(key=private_info["wandb_key"])
+        wandb.init(project=private_info["project"], entity=private_info["entity"],
+                   name='ia2c_value_coef')
     t = 0
     envs = VecRware(train_cfgs['num_process'], "rware-tiny-2ag-v1") #agent 2
     envs = RwareWrapper(envs)
     obss = envs.reset()
     num_obss = envs.observation_space[0].shape[-1]
-    model_cfgs['observation_space'] = envs.observation_space
-    model_cfgs['action_space'] = envs.action_space
+    model_cfgs['action_space'] = [act_space.n for act_space in envs.action_space]
+    model_cfgs['observation_space'] = [env_space.shape[0] for env_space in envs.observation_space]
     agent = IA2CAgent(None, env_cfgs, model_cfgs, train_cfgs)
     storage = RolloutBuffer(num_agent=env_cfgs['num_agent'],
                             num_obss=num_obss,
@@ -55,6 +56,8 @@ def train(cfgs): # todo: config 맞춰 만들어주기
             log_dict['episode_reward'] = np.mean(epi_rewards)
             print_square(log_dict)
             log_dict = dict(episode_reward=[], value_loss=[], policy_loss=[])
+        if train_cfgs['use_wandb']:
+            wandb.log({'epi_rewards': np.mean(epi_rewards)}, step=n)
         obss = next_obss
     print('Train completed!!')
     envs.close()
