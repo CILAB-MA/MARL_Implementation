@@ -65,4 +65,5 @@ class MultiAgentFCNetwork(MultiAgentNetwork):
             torch.jit.fork(model, x) for model, x in zip(self.independent, inputs)
         ]
         results = [torch.jit.wait(fut) for fut in futures]
+        results = torch.stack(results)
         return results
