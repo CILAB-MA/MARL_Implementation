@@ -7,7 +7,7 @@ train_cfgs = dict(
     num_process=8,
     rollout_step=10,
     device='cuda',
-    use_wandb=False
+    use_wandb=True
 )
 env_cfgs = dict(
     num_agent=2,

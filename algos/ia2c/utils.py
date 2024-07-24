@@ -1,6 +1,7 @@
 
 import torch as tr
 import numpy as np
+import copy
 
 class RolloutBuffer(object):
 
@@ -81,7 +82,7 @@ class RolloutBuffer(object):
             self.advantages[indices],
             self.critic_target[indices]
         )
-        return data
+        return copy.deepcopy(data)
 
 def print_square(dictionary):
     for key in dictionary.keys():

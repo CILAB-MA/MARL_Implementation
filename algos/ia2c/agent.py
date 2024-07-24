@@ -2,6 +2,22 @@ import numpy as np
 import torch as tr
 import torch.nn.functional as F
 from algos.ia2c.policies import ActorCriticPolicy
+from gym.spaces import flatdim
+@tr.jit.script
+def compute_returns(rewards, done, next_value, gamma: float):
+    returns = [next_value]
+    for i in range(len(rewards) - 1, -1, -1):
+        ret = rewards[i] + gamma * returns[0] * (1 - done[i, :].unsqueeze(1))
+        returns.insert(0, ret)
+    return returns
+
+def _split_batch(splits):
+    def thunk(batch):
+        return tr.split(batch, splits, dim=-1)
+
+    return thunk
+
+
 class IA2CAgent:
     def __init__(self, model, env_cfgs, model_cfgs, train_cfgs):
         self.model = ActorCriticPolicy(model_cfgs)
@@ -12,41 +28,34 @@ class IA2CAgent:
         self.train_cfgs = train_cfgs
         self.device = train_cfgs['device']
 
+        self.model = self.model.to(self.device)
+        self.split_obs = _split_batch([flatdim(s) for s in model_cfgs['observation_space']])
+        self.split_act = _split_batch(model_cfgs['num_agent'] * [1])
 
-    def update(self, storage):
-        data = storage.get()
-        obss, acts, advs, cri_tar = data
-        acts = acts.long()
-        vals, log_probs = self.evaluate_action(obss, acts)
-        print(acts,advs)
-        advs = (advs - advs.mean()) / (advs.std() + 1e-8)
-        policy_loss = -(advs.detach() * log_probs).sum(dim=-1).mean()
-        value_loss = (vals - cri_tar.detach()).pow(2).sum(dim=-1).mean()
-        loss = policy_loss + 0.5 * value_loss
+    def update(self, batch_obs, batch_act, batch_rew, batch_done, step):
+        with tr.no_grad():
+            next_value = self.model.get_value(self.split_obs(batch_obs[-1, :, :]))
+
+        returns = compute_returns(batch_rew, batch_done, next_value, 0.99)
+        values, action_log_probs, entropy = self.model.evaluate_actions(self.split_obs(batch_obs[:-1]),
+                                                                  self.split_act(batch_act))
+
+        returns = tr.stack(returns)[:-1]
+
+
+        advantage = returns - values
+
+        actor_loss = (
+                -(action_log_probs * advantage.detach()).sum(dim=2).mean()
+                - 0.01 * entropy
+        )
+        value_loss = (returns - values).pow(2).sum(dim=2).mean()
+
+        loss = actor_loss + 0.5 * value_loss
         self.model.optimizer.zero_grad()
         loss.backward()
         self.model.optimizer.step()
-
-        return value_loss.item(), policy_loss.item()
+        return actor_loss.item(), value_loss.item()
 
     def act(self, obss, deterministic=False):
-        with tr.no_grad():
-            obss = tr.cat([tr.from_numpy(o).unsqueeze(1) for o in obss], dim=1).transpose(0, 1)
-            action, log_probs = self.model.act(obss, deterministic=deterministic)
-            action = tr.cat(action, dim=-1)
-            log_probs = tr.cat(log_probs, dim=-1)
-            action = action.numpy()
-        return action, log_probs
-
-    def get_value(self, obss):
-        with tr.no_grad():
-            obss = tr.cat([tr.from_numpy(o).unsqueeze(1) for o in obss], dim=1).transpose(0, 1)
-            value = self.model.get_value(obss)
-        return value
-
-    def evaluate_action(self, obss, acts):
-        obss = obss.transpose(0, 1)
-        acts = acts.transpose(0, 1)
-        value = self.model.get_value(obss)
-        log_prob = self.model.get_log_prob(obss, acts)
-        return value, log_prob
+        return self.model.act(obss)
