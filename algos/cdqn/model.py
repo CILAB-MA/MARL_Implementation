@@ -1,4 +1,3 @@
-import torch
 import torch.nn as nn
 
 from utils.model_func import MultiAgentFCNetwork
@@ -23,9 +22,3 @@ class QNetwork(nn.Module):
 
     def forward(self, obs):
         return self.network(obs)
-
-    def save(self, path):
-        pass
-
-    def load(self, path):
-        pass

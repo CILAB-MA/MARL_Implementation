@@ -6,17 +6,18 @@ model_cfgs = dict(
     epsilon_decay=0.99,
     lr=1e-3,
     gamma=0.99,
-    batch_size=32,
-    buffer_size=512,
+    batch_size=128,
+    buffer_size=200000,
+    target_update_freq=5,
 )
 train_cfgs = dict(
     device='cpu',
-    n_episodes=20000,
-    target_update_freq=50,
-    num_process=4,
+    n_episodes=50000,
+    num_process=8,
+    use_wandb=True,
 )
 env_cfgs = dict(
-    action_space=5,
+    action_space=[],
     observation_space=[],
     num_agent=1,
 )
