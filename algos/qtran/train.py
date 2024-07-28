@@ -38,10 +38,10 @@ def train(cfgs):
         actions = agent.act(obss_tensor)
         next_obss, rewards, dones, infos = envs.step(actions)
         cumulative_reward_mean += rewards.sum(axis=0)
-        buffer.update(obss, actions, rewards, next_obss, dones) # todo: should make buffer
+        is_full = agent.update_buffer(obss, actions, rewards, next_obss, dones) # todo: should make buffer
 
-        if buffer.full:
-            loss = agent.update(buffer)
+        if is_full:
+            loss = agent.update()
         obss = next_obss
         if dones[0] == True:
             cumulative_reward_mean = cumulative_reward_mean / train_cfgs['num_process']
