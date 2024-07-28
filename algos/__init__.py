@@ -18,7 +18,13 @@ from algos.ca2c.agent import CA2CAgent
 from algos.ca2c.train import train as ca2ctrainer
 from algos.ca2c import cfg as ca2ccfg
 
+from algos.qtran.agent import QTRANAgent
+from algos.qtran.train import train as qtrantrainer
+from algos.qtran import cfg as qtrancfg
 
-AGENT = dict(base=BaseAgent, idqn=IDQNAgent, cdqn=CDQNAgent, ia2c=IA2CAgent, ca2c=CA2CAgent)
-TRAINER = dict(base=basetrainer, idqn=idqntrainer, cdqn=cdqntrainer, ia2c=ia2ctrainer, ca2c=ca2ctrainer)
-CFGS = dict(base=basecfg, idqn=idqncfg, cdqn=cdqncfg, ia2c=ia2ccfg, ca2c=ca2ccfg)
+
+AGENT = dict(base=BaseAgent, idqn=IDQNAgent, cdqn=CDQNAgent, ia2c=IA2CAgent, ca2c=CA2CAgent,
+             qtran=QTRANAgent)
+TRAINER = dict(base=basetrainer, idqn=idqntrainer, cdqn=cdqntrainer, ia2c=ia2ctrainer, ca2c=ca2ctrainer,
+               qtran=qtrantrainer)
+CFGS = dict(base=basecfg, idqn=idqncfg, cdqn=cdqncfg, ia2c=ia2ccfg, ca2c=ca2ccfg, qtran=qtrancfg)
