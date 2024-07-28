@@ -1,6 +1,7 @@
 
 import torch as tr
 import numpy as np
+import copy
 
 class RolloutBuffer(object):
 
@@ -15,7 +16,7 @@ class RolloutBuffer(object):
     def reset(self):
         self.observations = np.zeros((self.buffer_size, self.num_process, self.num_agent, self.num_obss), dtype=np.float32)
         self.actions = np.zeros((self.buffer_size, self.num_process, self.num_agent), dtype=np.int16)
-        self.rewards = np.zeros((self.buffer_size, self.num_process, self.num_agent), dtype=np.float16)
+        self.rewards = np.zeros((self.buffer_size, self.num_process, self.num_agent), dtype=np.float32)
         self.dones = np.zeros((self.buffer_size, self.num_process), dtype=np.float32)
         self.values = np.zeros((self.buffer_size, self.num_process, self.num_agent), dtype=np.float32)
         self.advantages = np.zeros((self.buffer_size, self.num_process, self.num_agent), dtype=np.float32)
@@ -23,6 +24,7 @@ class RolloutBuffer(object):
         self.critic_target = np.zeros((self.buffer_size, self.num_process, self.num_agent), dtype=np.float32)
         self.pos = 0
         self.full = False
+
     def add(self, obss, actions, rewards, dones, values, log_probs):
         obss_tmp = np.array([obs.copy() for obs in obss])
         obss = obss_tmp.transpose(1, 0, 2)
@@ -36,6 +38,7 @@ class RolloutBuffer(object):
         self.pos += 1
         if self.pos == self.buffer_size - 1:
             self.full =True
+
     def compute_advantage(self, next_values, dones):
         '''
         rollout step이 꽉차면 돈다
@@ -79,7 +82,7 @@ class RolloutBuffer(object):
             self.advantages[indices],
             self.critic_target[indices]
         )
-        return data
+        return copy.deepcopy(data)
 
 def print_square(dictionary):
     for key in dictionary.keys():
