@@ -40,7 +40,7 @@ class CDQNAgent:
         loss.backward()
         self.optimizer.step()
 
-        return loss
+        return loss.item()
 
     def decay_epsilon(self, episode, total_episode, target_update_freq):
         if self.qnet.epsilon > 0.05:

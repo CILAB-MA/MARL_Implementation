@@ -52,7 +52,7 @@ def train(cfgs):
         actions = agent.act(obs)
         done = [False for _ in range(num_process)]
         info = {}
-        loss = 0
+        losses = [0]
 
         while not all(done):
             next_obs, reward, done, info = envs.step(actions)
@@ -62,7 +62,8 @@ def train(cfgs):
 
             # Update QNetwork
             if replay_buffer.full():
-                loss += agent.update(replay_buffer)
+                loss = agent.update(replay_buffer)
+                losses.append(loss)
 
             obs = next_obs
             actions = agent.act(obs)
@@ -75,9 +76,9 @@ def train(cfgs):
         if cfgs.train_cfgs['use_wandb']:
             for i in range(envs.num_agent):
                 wandb.log({f'agent{i}/episode_returns': np.mean([x['episode_returns'][i] for x in info])}, step=episode)
-            wandb.log({'train/mean_episode_returns': np.mean([sum(x['episode_returns']) for x in info])}, step=episode)
+            wandb.log({'train/total_episode_returns': np.mean([np.sum(x['episode_returns']) for x in info])}, step=episode)
             wandb.log({'train/mean_episode_time': np.mean([x['episode_time'] for x in info])}, step=episode)
             wandb.log({'train/epsilon': agent.qnet.epsilon}, step=episode)
-            wandb.log({'train/loss': loss}, step=episode)
+            wandb.log({'train/loss': np.mean(losses) if losses is not None else 0}, step=episode)
 
     envs.close()
