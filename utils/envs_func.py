@@ -78,6 +78,24 @@ class CentralRwareWrapper(TorchRwareWrapper):
         return obs, reward, done, info
 
 
+class DecentralizeRwareWrapper(TorchRwareWrapper):
+    def __init__(self, envs):
+        super().__init__(envs)
+
+        self.obs_dim = envs.observation_space[0].shape[0]
+        self.action_dim = envs.action_space[0].n
+        self.num_agent = len(envs.observation_space)
+
+    def reset(self):
+        obs = super().reset()
+        return obs
+
+    def step_wait(self):
+        obs, reward, done, info = super().step_wait()
+        reward = reward.sum(axis=1)
+        return obs, reward, done, info
+
+
 class SquashDones(gym.Wrapper):
     r"""Wrapper that squashes multiple dones to a single one using all(dones)"""
 
