@@ -29,8 +29,6 @@ class ReplayBuffer:
         self.full = False
     
     def append(self, obss, actions, rewards, next_obss, dones) -> None:
-        # obss = np.array(obss)
-        # next_obss = np.array(next_obss)
         actions = np.array(actions).transpose(1,0)
         rewards = np.array(rewards).transpose(1,0)
         
