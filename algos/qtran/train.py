@@ -2,6 +2,7 @@ import wandb, yaml, os
 import torch as tr
 from utils.envs_func import VecRware, RwareWrapper
 from algos.qtran.agent import QTRANAgent
+from datetime import datetime
 
 def train(cfgs):
     train_cfgs = cfgs.train_cfgs
@@ -17,6 +18,8 @@ def train(cfgs):
             wandb.login(key=private_info["wandb_key"])
             wandb.init(project=private_info["project"], entity=private_info["entity"],
                        name='qtran')
+    run_name = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+    save_dir = f"./runs/qtran/{run_name}"
 
     envs = VecRware(train_cfgs['num_process'], "rware-tiny-2ag-v1")
     envs = RwareWrapper(envs)

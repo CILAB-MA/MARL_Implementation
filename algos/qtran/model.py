@@ -35,6 +35,18 @@ class QTRANNet(nn.Module):
             optimizer = getattr(optim, optimizer)
         self.optimizer = optimizer(self.parameters(), lr=model_cfg['lr'])
 
+    def get_indiv_q(self, obss):
+        return self.q(obss)
+
+    def get_target_q(self, obss):
+        return self.q_target(obss)
+
+    def get_joint_q(self, obss):
+        pass
+
+    def get_joint_target_q(self, obss):
+        pass
+
     def forward(self, obss, actions=None):
         state = tr.cat(obss, dim=1) # todo: check dim is right
         indiv_qs = self.q(obss)
