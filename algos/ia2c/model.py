@@ -9,9 +9,9 @@ class MLPNetwork(nn.Module):
 
         self.nn = nn.Sequential(
             nn.Linear(num_input, num_hidden),
-            nn.ReLu(),
+            nn.ReLU(),
             nn.Linear(num_hidden, num_hidden),
-            nn.ReLu(),
+            nn.ReLU(),
             nn.Linear(num_hidden, num_output)
         )
 

@@ -47,10 +47,8 @@ def train(cfgs):
     env_cfgs['act_space'] = [act_space.n for act_space in envs.action_space]
     env_cfgs['obs_space'] = [env_space.shape[0] for env_space in envs.observation_space]
 
-    
     agent = IDQNAgent(env_cfgs, model_cfgs, train_cfgs)
     
-
     train_reward_sum = [0., 0.]
     train_reward_avg = [0., 0.]
     train_reward_avg_history = [[0.,0.]]
@@ -73,7 +71,9 @@ def train(cfgs):
         train_reward_sum += rewards.sum(axis=0)
         if is_full:
             agent.update()
+
         obss = next_obss
+
 
             
         if dones[0] == True:

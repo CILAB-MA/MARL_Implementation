@@ -1,11 +1,16 @@
 from algos import TRAINER
 from algos import CFGS
 import argparse
+import os
+os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 
 def parse_args():
     parser = argparse.ArgumentParser(description='This is for common configs. Do not put unique configs (e.g. ppo-epoch)')
-    parser.add_argument('--trainer-name', default='base', type=str, choices=['base', 'idqn', 'cdqn', 'ia2c', 'ca2c'])
+    parser.add_argument('--trainer-name', default='base', type=str,
+                        choices=['base', 'idqn', 'cdqn', 'ia2c', 'ca2c',
+                                 'vdn', 'coma', 'qmix', 'qtran'])
     return parser.parse_args()
 
 
