@@ -3,6 +3,7 @@ import numpy as np
 from tqdm import tqdm
 import yaml
 import wandb
+from itertools import count
 
 from algos.vdn.agent import VDNAgent
 from algos.vdn.model import QNetwork
@@ -45,6 +46,7 @@ def train(cfgs):
         wandb.config.update(cfgs)
 
     # Run the environment
+    step = count(start=1, step=1)
     total_episode = (cfgs.train_cfgs['n_episodes'] + 1) // cfgs.train_cfgs['num_process']
     for episode in tqdm(range(1, total_episode), unit='episode'):
         obs = envs.reset()
@@ -63,7 +65,7 @@ def train(cfgs):
 
             # Update QNetwork
             if replay_buffer.full():
-                loss = agent.update(replay_buffer)
+                loss = agent.update(replay_buffer, step)
                 losses.append(loss)
 
             obs = next_obs
@@ -71,7 +73,7 @@ def train(cfgs):
 
         # Epsilon decay and target update
         if replay_buffer.full():
-            agent.decay_epsilon(episode, total_episode, cfgs.model_cfgs['target_update_freq'])
+            agent.decay_epsilon(total_episode)
 
         # Log wandb
         if cfgs.train_cfgs['use_wandb']:

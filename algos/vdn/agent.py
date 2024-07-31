@@ -23,7 +23,7 @@ class VDNAgent:
 
         return actions
 
-    def update(self, replay_buffer):
+    def update(self, replay_buffer, step):
         batch = replay_buffer.sample(self.qnet.batch_size)
         obs, actions, rewards, next_obs, dones = batch
 
@@ -42,17 +42,16 @@ class VDNAgent:
         loss.backward()
         self.optimizer.step()
 
+        if next(step) % self.qnet.target_update_freq == 0:
+            self.target_update()
+
         return loss.item()
 
-    def decay_epsilon(self, episode, total_episode, target_update_freq):
+    def decay_epsilon(self, total_episode):
         if self.qnet.epsilon > 0.05:
             self.qnet.epsilon -= 3 / total_episode
         else:
             self.qnet.epsilon = 0.05
-
-        # Update target network
-        if episode % target_update_freq == 0:
-            self.target_update()
 
     def target_update(self):
         self.qnet_target.load_state_dict(self.qnet.state_dict())

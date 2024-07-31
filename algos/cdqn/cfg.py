@@ -7,8 +7,8 @@ model_cfgs = dict(
     lr=3e-4,
     gamma=0.99,
     batch_size=128,
-    buffer_size=200000,
-    target_update_freq=5,
+    buffer_size=100000,
+    target_update_freq=200,
 )
 train_cfgs = dict(
     device='cpu',

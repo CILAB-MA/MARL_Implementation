@@ -15,6 +15,7 @@ class QNetwork(nn.Module):
         self.gamma = cfgs['gamma']
         self.batch_size = cfgs['batch_size']
         self.n_agents = cfgs['num_agent']
+        self.target_update_freq = cfgs['target_update_freq']
 
         self.network = MultiAgentFCNetwork([self.obs_dim] * self.n_agents,
                                            [self.hidden_dim, self.hidden_dim],
