@@ -48,7 +48,7 @@ def train(cfgs):
     env_cfgs['obs_space'] = [env_space.shape[0] for env_space in envs.observation_space]
 
     
-    agent = IDQNAgent(None, env_cfgs, model_cfgs, train_cfgs)
+    agent = IDQNAgent(env_cfgs, model_cfgs, train_cfgs)
     
 
     train_reward_sum = [0., 0.]
