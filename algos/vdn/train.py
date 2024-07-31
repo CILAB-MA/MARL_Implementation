@@ -43,7 +43,9 @@ def train(cfgs):
             private_info = yaml.load(f, Loader=yaml.FullLoader)
         wandb.login(key=private_info["wandb_key"])
         wandb.init(project=private_info["project"], entity=private_info["entity"], name='vdn')
-        wandb.config.update(cfgs)
+        wandb.config.update(cfgs.env_cfgs)
+        wandb.config.update(cfgs.model_cfgs)
+        wandb.config.update(cfgs.train_cfgs)
 
     # Run the environment
     step = count(start=1, step=1)
