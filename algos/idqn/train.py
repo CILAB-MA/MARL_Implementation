@@ -47,10 +47,8 @@ def train(cfgs):
     env_cfgs['act_space'] = [act_space.n for act_space in envs.action_space]
     env_cfgs['obs_space'] = [env_space.shape[0] for env_space in envs.observation_space]
 
+    agent = IDQNAgent(env_cfgs, model_cfgs, train_cfgs)
     
-    agent = IDQNAgent(None, env_cfgs, model_cfgs, train_cfgs)
-    
-
     train_reward_sum = [0., 0.]
     train_reward_avg = [0., 0.]
     train_reward_avg_history = [[0.,0.]]
@@ -73,7 +71,9 @@ def train(cfgs):
         train_reward_sum += rewards.sum(axis=0)
         if is_full:
             agent.update()
-            obss = next_obss
+
+        obss = next_obss
+
 
             
         if dones[0] == True:
@@ -117,7 +117,7 @@ def start_wandb():
     with open('./wandb_key.json', 'r') as f:
         wandb_key = json.load(f)
     wandb.login(key=wandb_key["wandb_key"])
-    run = wandb.init(project='rware', entity="224lsy", monitor_gym=True)
+    run = wandb.init(project='marl_implement', entity="cilab-ma", monitor_gym=True)
     return run
 
 #================

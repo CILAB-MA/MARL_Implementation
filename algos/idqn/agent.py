@@ -10,7 +10,7 @@ from algos.idqn.replay_buffer import ReplayBuffer
 
 
 class IDQNAgent:
-    def __init__(self, model, env_cfgs, model_cfgs, train_cfgs):
+    def __init__(self, env_cfgs, model_cfgs, train_cfgs):
         self.env_cfgs = env_cfgs
         self.model_cfgs = model_cfgs
         self.train_cfgs = train_cfgs
@@ -20,8 +20,6 @@ class IDQNAgent:
         self.target_update_interval_or_tau = train_cfgs['target_update_interval']
 
         self.model = QNet(model_cfgs, env_cfgs).to(self.device)
-        # self.models = [QNet(self.model_cfgs, self.env_cfgs).to(self.device) for _ in range(self.env_cfgs['num_agent'])]
-        # self.optimizers = [optim.Adam(model.parameters(), lr=self.model_cfgs['lr']) for model in self.models]
         self.replay_buffer = ReplayBuffer(train_cfgs, model_cfgs, env_cfgs)
         self.epsilon_scheduler = EpsilonScheduler(
             start=train_cfgs['epsilon'], 
@@ -91,22 +89,6 @@ class IDQNAgent:
                         device=obss[idx].device
                 )
                 actions[idx] = action
-            
-        # for idx, model in enumerate(self.models):
-        #     obs = obss[idx]
-        #     if len(obs.shape) == 1:
-        #         obs = obs.unsqueeze(0)
-        #     num_process = obs.shape[0]
-        #     if random.random() < epsilon:
-        #         action = torch.randint(
-        #             high=int(self.env_cfgs['act_space']), 
-        #             size=(num_process,),  
-        #             device=obs.device
-        #         )
-        #     else:
-        #         q_vals = model.act(obs)
-        #         action = q_vals.argmax(dim=1)
-        #     actions.append(action)
         actions = torch.stack(actions)
         actions = actions.t().detach().cpu().numpy()
         return actions
