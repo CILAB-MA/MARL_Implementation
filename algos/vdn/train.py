@@ -42,6 +42,7 @@ def train(cfgs):
             private_info = yaml.load(f, Loader=yaml.FullLoader)
         wandb.login(key=private_info["wandb_key"])
         wandb.init(project=private_info["project"], entity=private_info["entity"], name='vdn')
+        wandb.config.update(cfgs)
 
     # Run the environment
     total_episode = (cfgs.train_cfgs['n_episodes'] + 1) // cfgs.train_cfgs['num_process']
@@ -75,10 +76,11 @@ def train(cfgs):
         # Log wandb
         if cfgs.train_cfgs['use_wandb']:
             for i in range(envs.num_agent):
-                wandb.log({f'agent{i}/episode_returns': np.mean([x['episode_returns'][i] for x in info])}, step=episode)
-            wandb.log({'train/total_episode_returns': np.mean([np.sum(x['episode_returns']) for x in info])}, step=episode)
-            wandb.log({'train/mean_episode_time': np.mean([x['episode_time'] for x in info])}, step=episode)
-            wandb.log({'train/epsilon': agent.qnet.epsilon}, step=episode)
-            wandb.log({'train/loss': np.mean(losses) if losses is not None else 0}, step=episode)
+                wandb.log({f'epi_reward(agent{i})': np.mean([x['episode_returns'][i] for x in info])}, step=episode)
+            wandb.log({'epi_rewards': np.mean([np.sum(x['episode_returns']) for x in info])}, step=episode)
+            wandb.log({'epi_time': np.mean([x['episode_time'] for x in info])}, step=episode)
+            wandb.log({'epsilon': agent.qnet.epsilon}, step=episode)
+            wandb.log({'loss': np.mean(losses) if losses is not None else 0}, step=episode)
+            wandb.log({'buffer_size': replay_buffer.__len__()}, step=episode)
 
     envs.close()
