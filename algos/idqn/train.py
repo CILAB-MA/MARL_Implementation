@@ -34,10 +34,10 @@ def train(cfgs):
     device = torch.device('cuda:0' if torch.cuda.is_available() else "cpu")
     model_cfgs['device'] = device
     
-    envs = VecRware(train_cfgs['num_process'], "rware-tiny-2ag-v1") #agent 2
+    envs = VecRware(train_cfgs['num_process'], "rware:rware-tiny-2ag-v1") #agent 2
     envs = RwareWrapper(envs)
     
-    test_env = gym.make("rware-tiny-2ag-v1")
+    test_env = gym.make("rware:rware-tiny-2ag-v1")
 
 
     obss = envs.reset()    

@@ -51,9 +51,9 @@ class IDQNAgent:
         obss, actions, rewards, next_obss, dones = minibatch
 
         
-        expected_q_vals = torch.stack(self.model.critic_net(obss)).gather(3, actions).squeeze(3)
+        expected_q_vals = self.model.critic_net(obss).gather(3, actions).squeeze(3)
         with torch.no_grad():
-            target_q_vals = torch.stack(self.model.target_net(next_obss)).max(dim=3)[0] * (1-dones)
+            target_q_vals = self.model.target_net(next_obss).max(dim=3)[0] * (1-dones)
             target_q_vals = rewards + self.gamma * target_q_vals
         loss = F.mse_loss(expected_q_vals, target_q_vals)
         
