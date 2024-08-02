@@ -12,7 +12,7 @@ model_cfgs = dict(
 )
 train_cfgs = dict(
     device='cpu',
-    n_episodes=50000,
+    n_episodes=20000,
     num_process=8,
     use_wandb=True,
 )
