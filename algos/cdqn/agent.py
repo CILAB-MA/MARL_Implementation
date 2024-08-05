@@ -27,12 +27,15 @@ class CDQNAgent:
         batch = replay_buffer.sample(self.qnet.batch_size)
         obs, actions, rewards, next_obs, dones = batch
 
+        # q values
         q_values = self.qnet(obs)
         q_values = torch.gather(q_values, 3, actions.unsqueeze(-1)).squeeze(-1)
 
         with torch.no_grad():
-            q_values_next = self.qnet_target(next_obs).max(dim=-1).values
-            target = rewards + self.qnet.gamma * q_values_next * (1 - dones.int())
+            a_prime = self.qnet(next_obs).argmax(dim=-1)
+            q_values_next = torch.gather(self.qnet_target(next_obs), 3, a_prime.unsqueeze(-1)).squeeze(-1)
+
+        target = rewards + self.qnet.gamma * q_values_next * (1 - dones.int())
 
         loss = nn.functional.mse_loss(q_values, target)
 
