@@ -37,7 +37,7 @@ class ActorCritic(nn.Module):
         action_shape = [flatdim(a) for a in action_space]
 
         self.centralised_critic = cfg.model_cfgs['centralised']
-        critic_obs_shape = self.n_agents * [sum(obs_shape)] if cfg.model_cfgs['centralised'] else obs_shape
+        critic_obs_shape = self.n_agents * [sum(obs_shape)] if cfg.model_cfgs['centralised'] else obs_shape # n_agents * [142] or obs_shape [71, 71]
 
         self.actor = model_func.MultiAgentFCNetwork(obs_shape, [64, 64], action_shape, True)
         self.critic = model_func.MultiAgentFCNetwork(critic_obs_shape, [64, 64], [1] * self.n_agents, True)
@@ -83,13 +83,12 @@ class ActorCritic(nn.Module):
         if self.centralised_critic:
             inputs = self.n_agents * [torch.cat(inputs, dim=-1)]
 
-        return torch.cat(self.critic(inputs), dim=-1)
+        return torch.cat(list(torch.unbind(self.critic(inputs))), dim=-1)
 
     def get_target_value(self, inputs):
         if self.centralised_critic:
             inputs = self.n_agents * [torch.cat(inputs, dim=-1)]
-
-        return torch.cat(self.target_critic(inputs), dim=-1)
+        return torch.cat(list(torch.unbind(self.target_critic(inputs))), dim=-1)
 
     def evaluate_actions(self, inputs, action, action_mask=None, state=None):
         if not state:

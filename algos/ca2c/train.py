@@ -20,7 +20,7 @@ def train(cfgs):
 
     device = torch.device('cuda:0' if torch.cuda.is_available() else "cpu")
 
-    envs = envs_func.VecRware(cfgs.train_cfgs['num_process'], "rware-tiny-2ag-v1")
+    envs = envs_func.VecRware(cfgs.train_cfgs['num_process'], "rware:rware-tiny-2ag-v1")
     envs = envs_func.RwareWrapper(envs)
 
     model = ActorCritic(envs.observation_space, envs.action_space, cfgs, device)
