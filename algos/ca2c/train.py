@@ -60,12 +60,15 @@ def train(cfgs):
                 if "episode_returns" in info:
                     epi_rewards.append(sum(info["episode_returns"]))
 
-        model.update(batch_obs, batch_act, batch_rew, batch_done, step)
+        loss = model.update(batch_obs, batch_act, batch_rew, batch_done, step)
 
         batch_obs[0, :, :] = batch_obs[-1, :, :]
         batch_done[0, :] = batch_done[-1, :]
 
         if cfgs.train_cfgs['use_wandb']:
             wandb.log({'epi_rewards': np.mean(epi_rewards)}, step=step)
+            wandb.log({"epi_reward(agent0)": epi_rewards[0]}, step=step)
+            wandb.log({"epi_reward(agent1)": epi_rewards[1]}, step=step)
+            wandb.log({"loss": loss}, step=step)
 
     envs.close()

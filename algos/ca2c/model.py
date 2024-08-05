@@ -142,3 +142,5 @@ class ActorCritic(nn.Module):
             self.soft_update(1.0)
         elif self.target_update_interval_or_tau < 1.0:
             self.soft_update(self.target_update_interval_or_tau)
+
+        return loss
