@@ -3,6 +3,7 @@ from typing import List
 
 import torch
 from torch import nn
+import torch.nn.functional as F
 
 
 class MultiCategorical:
@@ -67,3 +68,19 @@ class MultiAgentFCNetwork(MultiAgentNetwork):
         results = [torch.jit.wait(fut) for fut in futures]
         results = torch.stack(results)
         return results
+
+
+class CriticFCNetwork(nn.Module):
+    def __init__(self, agent_num, state_dim, action_dim):
+        super(CriticFCNetwork, self).__init__()
+
+        input_dim = 1 + (state_dim * agent_num) + agent_num  # state(concat_obs), index, previous_joint_actions
+
+        self.fc1 = nn.Linear(input_dim, 64)
+        self.fc2 = nn.Linear(64, 64)
+        self.fc3 = nn.Linear(64, action_dim)
+
+    def forward(self, x):
+        x = F.relu(self.fc1(x))
+        x = F.relu(self.fc2(x))
+        return self.fc3(x)
