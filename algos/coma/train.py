@@ -4,10 +4,11 @@ from collections import defaultdict
 from gym.spaces import flatdim
 import torch
 from utils import envs_func
-from algos.coma.model import ActorCritic
+from algos.coma.model import ActorCritic, RNNAgent
 import numpy as np
 import wandb
 import yaml
+
 
 def train(cfgs):
 
@@ -24,6 +25,8 @@ def train(cfgs):
     envs = envs_func.RwareWrapper(envs)
 
     model = ActorCritic(envs.observation_space, envs.action_space, cfgs, device)
+    agent = RNNAgent(envs.observation_space, [64, 64], envs.action_space, device)
+    agent.init_hidden(batch_size=cfgs.train_cfgs['num_process'], n_agents= len(envs.observation_space))
 
     # creates and initialises storage
     obs = envs.reset()
@@ -46,13 +49,13 @@ def train(cfgs):
         for n in range(cfgs.env_cfgs['n_steps']):
             with torch.no_grad():
                 """actor"""
-                actions = model.act(model.split_obs(batch_obs[n, :, :]))
+                actions = agent.act(batch_obs[n, :, :])
 
-            obs, reward, done, infos = envs.step([x.squeeze().tolist() for x in torch.cat(actions, dim=1).split(1, dim=0)])
+            obs, reward, done, infos = envs.step(actions.tolist())
             done = torch.tensor(done, dtype=torch.float32)
 
             batch_obs[n + 1, :, :] = torch.cat([torch.from_numpy(o) for o in obs], dim=1)
-            batch_act[n, :, :] = torch.cat(actions, dim=1)
+            batch_act[n, :, :] = actions
             batch_done[n + 1, :] = all(done)
             batch_rew[n, :] = torch.tensor(reward)
             storage["info"].extend([i for i in infos if "episode_returns" in i])

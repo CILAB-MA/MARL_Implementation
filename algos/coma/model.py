@@ -5,15 +5,12 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch import optim
 
-from utils import model_func
-
 
 def _split_batch(splits):
     def thunk(batch):
         return torch.split(batch, splits, dim=-1)
 
     return thunk
-
 
 @torch.jit.script
 def compute_returns(rewards, done, next_value, gamma: float):
@@ -22,6 +19,83 @@ def compute_returns(rewards, done, next_value, gamma: float):
         ret = rewards[i] + gamma * returns[0] * (1 - done[i, :].unsqueeze(1))
         returns.insert(0, ret)
     return returns
+
+
+class CriticFCNetwork(nn.Module):
+    def __init__(self, agent_num, state_dim, action_dim):
+        super(CriticFCNetwork, self).__init__()
+
+        # state, action, other_actions, index
+        input_dim = (state_dim * agent_num) + action_dim + (action_dim * agent_num) + agent_num
+
+        self.fc1 = nn.Linear(input_dim, 64)
+        self.fc2 = nn.Linear(64, 64)
+        self.fc3 = nn.Linear(64, action_dim)
+
+    def forward(self, x):
+        x = F.relu(self.fc1(x))
+        x = F.relu(self.fc2(x))
+        return self.fc3(x)
+
+
+class RNNAgent(nn.Module):
+    def __init__(self, obs_space, hidden_dim, action_space, device):
+        super(RNNAgent, self).__init__()
+
+        obs_shape = [flatdim(o) for o in obs_space]
+        action_shape = [flatdim(a) for a in action_space]
+        self.split_obs = _split_batch([flatdim(s) for s in obs_space])
+        self.n_agents = len(obs_shape)
+
+        self.fc1 = nn.Linear(obs_shape[0] + self.n_agents, hidden_dim[0])
+        self.rnn = nn.GRUCell(hidden_dim[0], hidden_dim[1])
+        self.fc2 = nn.Linear(hidden_dim[1], action_shape[0])
+
+        self.device = device
+        self.hidden_dim = hidden_dim[0]
+        self.hidden_states = None
+
+    def init_hidden(self, batch_size, n_agents):
+        # make hidden states on same device as model
+        hidden_states = self.fc1.weight.new(1, self.hidden_dim).zero_()
+        self.hidden_states = hidden_states.unsqueeze(0).expand(batch_size, n_agents, -1)
+
+    def forward(self, inputs, hidden_state):
+
+        batch_size, _ = inputs.shape
+
+        build_inputs = self.build_actor_input(inputs)
+        x = F.relu(self.fc1(build_inputs))
+        h_in = hidden_state.reshape(-1, self.hidden_dim)
+        h = self.rnn(x, h_in)
+        q = self.fc2(h)
+
+        # policy_logit for choose action
+        action_pi = F.softmax(q, dim=-1)
+        action_pi = action_pi.view(batch_size, self.n_agents, -1)
+        return action_pi, h
+
+    def act(self, inputs):
+
+        q, h = self.forward(inputs, self.hidden_states)
+        dist = Categorical(q)
+        actions = dist.sample().long()
+
+        return actions
+
+    def build_actor_input(self, batch_obs):
+        batch, _ = batch_obs.shape
+
+        batch_split_obs = self.split_obs(batch_obs)  # num_agent, batch, feature
+        batch_split_obs = torch.cat(batch_split_obs, dim=0)  # num_agent * batch, feature
+
+        # index (8, 2, 2)
+        batch_index = torch.eye(self.n_agents, device=self.device).unsqueeze(0).expand(batch, -1,  -1)
+        batch_index = batch_index.reshape(batch * self.n_agents, -1)  # batch * num_agent , feature
+
+        inputs = torch.cat([batch_split_obs, batch_index], dim=-1)
+
+        return inputs
 
 
 class ActorCritic(nn.Module):
@@ -34,12 +108,11 @@ class ActorCritic(nn.Module):
         self.n_steps = cfg.env_cfgs['n_steps']
 
         self.n_agents = len(obs_space)
-        self.obs_shape = [flatdim(o) for o in obs_space]  # [142, 142]
+        self.obs_shape = [flatdim(o) for o in obs_space]  # [71, 71]
         self.action_shape = [flatdim(a) for a in action_space]  # [5, 5]
 
-        self.actor = model_func.MultiAgentFCNetwork(self.obs_shape, [64, 64], self.action_shape, True)
-        self.critic = model_func.CriticFCNetwork(self.n_agents, self.obs_shape[0], self.action_shape[0])
-        self.target_critic = model_func.CriticFCNetwork(self.n_agents, self.obs_shape[0], self.action_shape[0])
+        self.critic = CriticFCNetwork(self.n_agents, self.obs_shape[0], self.action_shape[0])
+        self.target_critic = CriticFCNetwork(self.n_agents, self.obs_shape[0], self.action_shape[0])
 
         self.device = device
 
@@ -60,29 +133,9 @@ class ActorCritic(nn.Module):
 
         self.target_update_interval_or_tau = 200
 
-        self.split_obs = _split_batch([flatdim(s) for s in obs_space])
-        self.split_act = _split_batch(self.n_agents * [1])
-
     def forward(self, inputs, rnn_hxs, masks):
         raise NotImplementedError(
             "Forward not implemented. Use act, get_value, get_target_value or evaluate_actions instead.")
-
-    def get_dist(self, actor_features, action_mask):
-        if action_mask:
-            action_mask = [-9999999 * (1 - action_mask) for a in action_mask]
-        else:
-            action_mask = len(actor_features) * [0]
-
-        dist = model_func.MultiCategorical(
-            [Categorical(logits=x + s) for x, s in zip(actor_features, action_mask)]
-        )
-        return dist
-
-    def act(self, inputs, action_mask=None):
-        actor_features = self.actor(inputs)
-        dist = self.get_dist(actor_features, action_mask)
-        action = dist.sample()
-        return action
 
     def soft_update(self, t):
         source, target = self.critic, self.target_critic
@@ -91,7 +144,7 @@ class ActorCritic(nn.Module):
 
     def update(self, batch_obs, batch_act, batch_rew, batch_done, step):
 
-        batch_critic_input = self.build_input(batch_obs, batch_act)
+        batch_critic_input = self.build_critic_input(batch_obs, batch_act)
 
         '''train_critic'''
         with torch.no_grad():
@@ -106,6 +159,7 @@ class ActorCritic(nn.Module):
         index_acts = batch_act.long().unsqueeze(-1)  # 10, 8, 2, 1
         values = self.critic(batch_critic_input)  # 10, 8, 2, 5
         values_taken = torch.gather(values, dim=-1, index=index_acts).squeeze(-1)
+
         critic_loss = (returns - values_taken).pow(2).sum(dim=2).mean()
 
         self.critic_optimizer.zero_grad()
@@ -113,17 +167,28 @@ class ActorCritic(nn.Module):
         self.critic_optimizer.step()
 
         '''optimize agents(actor)'''
-        # values, action_log_probs, entropy = self.evaluate_actions(self.split_obs(batch_obs[:-1]),
-        #                                                           self.split_act(batch_act))
-        #
-        # advantage = returns - values
-        #
-        # actor_loss = (
-        #         -(action_log_probs * advantage.detach()).sum(dim=2).mean()
-        #         - self.entropy_coef * entropy
-        # )
-        #
-        # loss = actor_loss + self.value_loss_coef * critic_loss
+        # TODO actor를 하나만 둘지 따로 둘지는 생각해야한다.
+
+        actor_out = []
+        self.actor.init_hidden(batch_obs.size, self.n_agents)
+        for t in range():
+            agent_outs = self.actor.forward()
+            actor_out.append(agent_outs)
+        actor_out = torch.stack(actor_out, dim=1)
+
+        values = values.reshape(-1, self.action_shape[0])
+        pi = actor_out.view(-1, self.action_shape[0])
+        baseline = (pi * values).sum(-1).detach()
+        print(values.shape)
+
+        advantage = returns - values
+        # print(advantage)
+
+        # actor_loss = ( -(action_log_probs * advantage.detach()).sum(dim=2).mean() - self.entropy_coef * entropy)
+
+        self.actor_optimizer.zero_grad()
+        actor_loss.backward()
+        self.actor_optimizer.step()
 
         if self.target_update_interval_or_tau > 1.0 and step % self.target_update_interval_or_tau == 0:
             self.soft_update(1.0)
@@ -132,7 +197,7 @@ class ActorCritic(nn.Module):
 
         return critic_loss
 
-    def build_input(self, batch_obs, batch_act):
+    def build_critic_input(self, batch_obs, batch_act):
         num_step, batch, _ = batch_act.shape
 
         batch_obs = batch_obs.unsqueeze(2).repeat(1, 1, self.n_agents, 1)  # (11, 8, 142) -> (11, 8, 2, 142)

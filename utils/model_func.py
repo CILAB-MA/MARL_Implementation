@@ -3,8 +3,6 @@ from typing import List
 
 import torch
 from torch import nn
-import torch.nn.functional as F
-
 
 class MultiCategorical:
     def __init__(self, categoricals):
@@ -33,7 +31,7 @@ def make_fc(dims, activation=nn.ReLU, final_activation=None, use_orthogonal_init
     input_size = dims[0]
     h_sizes = dims[1:]
 
-    mods = [nn.Linear(input_size, h_sizes[0])]
+    mods = [nn.Linear(input_size, h_sizes[0])]  # h_sizes [64, 64, 5]
     for i in range(len(h_sizes) - 1):
         mods.append(activation())
         layer = nn.Linear(h_sizes[i], h_sizes[i + 1])
@@ -68,20 +66,3 @@ class MultiAgentFCNetwork(MultiAgentNetwork):
         results = [torch.jit.wait(fut) for fut in futures]
         results = torch.stack(results)
         return results
-
-
-class CriticFCNetwork(nn.Module):
-    def __init__(self, agent_num, state_dim, action_dim):
-        super(CriticFCNetwork, self).__init__()
-
-        # state, action, other_actions. index
-        input_dim = (state_dim * agent_num) + action_dim + (action_dim * agent_num) + agent_num
-
-        self.fc1 = nn.Linear(input_dim, 64)
-        self.fc2 = nn.Linear(64, 64)
-        self.fc3 = nn.Linear(64, action_dim)
-
-    def forward(self, x):
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
-        return self.fc3(x)
