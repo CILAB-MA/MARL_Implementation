@@ -74,7 +74,8 @@ class CriticFCNetwork(nn.Module):
     def __init__(self, agent_num, state_dim, action_dim):
         super(CriticFCNetwork, self).__init__()
 
-        input_dim = 1 + (state_dim * agent_num) + agent_num  # state(concat_obs), index, previous_joint_actions
+        # state, action, other_actions. index
+        input_dim = (state_dim * agent_num) + action_dim + (action_dim * agent_num) + agent_num
 
         self.fc1 = nn.Linear(input_dim, 64)
         self.fc2 = nn.Linear(64, 64)
