@@ -60,24 +60,24 @@ class RNNAgent(nn.Module):
         hidden_states = self.fc1.weight.new(1, self.hidden_dim).zero_()
         self.hidden_states = hidden_states.unsqueeze(0).expand(batch_size, n_agents, -1)
 
-    def forward(self, inputs, hidden_state):
+    def forward(self, inputs):
 
         batch_size, _ = inputs.shape
 
         build_inputs = self.build_actor_input(inputs)
         x = F.relu(self.fc1(build_inputs))
-        h_in = hidden_state.reshape(-1, self.hidden_dim)
+        h_in = self.hidden_states.reshape(-1, self.hidden_dim)
         h = self.rnn(x, h_in)
         q = self.fc2(h)
 
         # policy_logit for choose action
         action_pi = F.softmax(q, dim=-1)
         action_pi = action_pi.view(batch_size, self.n_agents, -1)
-        return action_pi, h
+        return action_pi, self.hidden_states
 
     def act(self, inputs):
 
-        q, h = self.forward(inputs, self.hidden_states)
+        q, h = self.forward(inputs)
         dist = Categorical(q)
         actions = dist.sample().long()
 
@@ -98,9 +98,9 @@ class RNNAgent(nn.Module):
         return inputs
 
 
-class ActorCritic(nn.Module):
-    def __init__(self, obs_space, action_space, cfg, device):
-        super(ActorCritic, self).__init__()
+class COMA(nn.Module):
+    def __init__(self, actor, obs_space, action_space, cfg, device):
+        super(COMA, self).__init__()
         self.gamma = cfg.model_cfgs['gamma']
         self.entropy_coef = cfg.model_cfgs['entropy_coef']
         self.grad_clip = cfg.model_cfgs['grad_clip']
@@ -113,23 +113,21 @@ class ActorCritic(nn.Module):
 
         self.critic = CriticFCNetwork(self.n_agents, self.obs_shape[0], self.action_shape[0])
         self.target_critic = CriticFCNetwork(self.n_agents, self.obs_shape[0], self.action_shape[0])
+        self.actor = actor
 
         self.device = device
 
         self.soft_update(1.0)
         self.to(device)
 
-        # TODO need to fix (optimizer)
         optimizer = getattr(optim, cfg.model_cfgs['optimizer'])
         if type(optimizer) is str:
             optimizer = getattr(optim, optimizer)
-        self.optimizer_class = optimizer
 
         lr = cfg.model_cfgs['lr']
-        self.optimizer = optimizer(self.parameters(), lr=lr)
 
-        self.critic_optimizer = optimizer(self.parameters(), lr=lr)
-        self.agent_optimizer = optimizer(self.parameters(), lr=lr)
+        self.critic_optimizer = optimizer(self.critic.parameters(), lr=lr)
+        self.actor_optimizer = optimizer(self.actor.parameters(), lr=lr)
 
         self.target_update_interval_or_tau = 200
 
@@ -142,11 +140,12 @@ class ActorCritic(nn.Module):
         for target_param, source_param in zip(target.parameters(), source.parameters()):
             target_param.data.copy_((1 - t) * target_param.data + t * source_param.data)
 
-    def update(self, batch_obs, batch_act, batch_rew, batch_done, step):
+    def update(self, actor, batch_obs, batch_act, batch_rew, batch_done, step):
+        n_steps, batch_size, feature = batch_act.shape
 
         batch_critic_input = self.build_critic_input(batch_obs, batch_act)
 
-        '''train_critic'''
+        '''train_critic''' #TODO mask 적용하기?
         with torch.no_grad():
             next_value = self.target_critic(batch_critic_input[self.n_steps-1])
 
@@ -157,34 +156,43 @@ class ActorCritic(nn.Module):
         returns = torch.stack(returns)[:-1]  # (10, 8, 2)
 
         index_acts = batch_act.long().unsqueeze(-1)  # 10, 8, 2, 1
+
         values = self.critic(batch_critic_input)  # 10, 8, 2, 5
         values_taken = torch.gather(values, dim=-1, index=index_acts).squeeze(-1)
 
-        critic_loss = (returns - values_taken).pow(2).sum(dim=2).mean()
+        critic_loss = (returns - values_taken).pow(2).sum(dim=2).mean()  # TODO check
 
         self.critic_optimizer.zero_grad()
         critic_loss.backward()
         self.critic_optimizer.step()
 
         '''optimize agents(actor)'''
-        # TODO actor를 하나만 둘지 따로 둘지는 생각해야한다.
-
         actor_out = []
-        self.actor.init_hidden(batch_obs.size, self.n_agents)
-        for t in range():
-            agent_outs = self.actor.forward()
+        actor.init_hidden(batch_size=batch_size, n_agents=self.n_agents)
+        for i in range(n_steps):
+            agent_outs, hidden_states = actor.forward(batch_obs[i])
             actor_out.append(agent_outs)
-        actor_out = torch.stack(actor_out, dim=1)
+        actor_out = torch.stack(actor_out, dim=0)  # (10, 8, 2, 5)
 
+        # calculated baseline
         values = values.reshape(-1, self.action_shape[0])
         pi = actor_out.view(-1, self.action_shape[0])
         baseline = (pi * values).sum(-1).detach()
-        print(values.shape)
 
-        advantage = returns - values
-        # print(advantage)
+        # Calculate policy grad with mask
+        values_taken_reshape = values_taken.reshape(-1, 1).squeeze(1)
+        pi_taken = torch.gather(actor_out, dim=-1, index=index_acts).squeeze(1)
+        log_pi_taken = torch.log(pi_taken)
 
-        # actor_loss = ( -(action_log_probs * advantage.detach()).sum(dim=2).mean() - self.entropy_coef * entropy)
+        # advantage
+        advantage = (values_taken_reshape - baseline).detach()
+
+        entropy = torch.sum(pi * torch.log(pi + 1e-10), dim=-1)
+
+        actor_loss = (
+                -(advantage * log_pi_taken + self.entropy_coef * entropy)
+                .sum(dim=2).mean()
+        )
 
         self.actor_optimizer.zero_grad()
         actor_loss.backward()

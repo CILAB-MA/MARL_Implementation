@@ -4,7 +4,7 @@ from collections import defaultdict
 from gym.spaces import flatdim
 import torch
 from utils import envs_func
-from algos.coma.model import ActorCritic, RNNAgent
+from algos.coma.model import COMA, RNNAgent
 import numpy as np
 import wandb
 import yaml
@@ -24,9 +24,10 @@ def train(cfgs):
     envs = envs_func.VecRware(cfgs.train_cfgs['num_process'], "rware:rware-tiny-2ag-v1")
     envs = envs_func.RwareWrapper(envs)
 
-    model = ActorCritic(envs.observation_space, envs.action_space, cfgs, device)
     agent = RNNAgent(envs.observation_space, [64, 64], envs.action_space, device)
-    agent.init_hidden(batch_size=cfgs.train_cfgs['num_process'], n_agents= len(envs.observation_space))
+    agent.init_hidden(batch_size=cfgs.train_cfgs['num_process'], n_agents=len(envs.observation_space))
+    model = COMA(agent, envs.observation_space, envs.action_space, cfgs, device)
+
 
     # creates and initialises storage
     obs = envs.reset()
@@ -65,7 +66,7 @@ def train(cfgs):
                     epi_rewards.append(sum(info["episode_returns"]))
 
         """critic_update"""
-        loss = model.update(batch_obs, batch_act, batch_rew, batch_done, step)
+        loss = model.update(agent, batch_obs, batch_act, batch_rew, batch_done, step)
 
         batch_obs[0, :, :] = batch_obs[-1, :, :]
         batch_done[0, :] = batch_done[-1, :]
