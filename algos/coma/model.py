@@ -12,6 +12,7 @@ def _split_batch(splits):
 
     return thunk
 
+
 @torch.jit.script
 def compute_returns(rewards, done, next_value, gamma: float):
     returns = [next_value]
@@ -142,10 +143,13 @@ class COMA(nn.Module):
 
     def update(self, actor, batch_obs, batch_act, batch_rew, batch_done, step):
         n_steps, batch_size, feature = batch_act.shape
+        mask = 1 - batch_done[1:, :]  # (10, 8)
+        critic_mask = mask.unsqueeze(-1).repeat(1, 1, self.n_agents)  # (10, 8, 2)
+        actor_mask = critic_mask.reshape(-1, 1).squeeze(1)
 
         batch_critic_input = self.build_critic_input(batch_obs, batch_act)
 
-        '''train_critic''' #TODO mask 적용하기?
+        '''train_critic'''
         with torch.no_grad():
             next_value = self.target_critic(batch_critic_input[self.n_steps-1])
 
@@ -159,8 +163,11 @@ class COMA(nn.Module):
 
         values = self.critic(batch_critic_input)  # 10, 8, 2, 5
         values_taken = torch.gather(values, dim=-1, index=index_acts).squeeze(-1)
+        td_error = returns - values_taken  # 10, 8, 2
 
-        critic_loss = (returns - values_taken).pow(2).sum(dim=2).mean()  # TODO check
+        masked_td_error = td_error * critic_mask
+
+        critic_loss = masked_td_error.pow(2).sum(dim=2).mean()
 
         self.critic_optimizer.zero_grad()
         critic_loss.backward()
@@ -181,18 +188,20 @@ class COMA(nn.Module):
 
         # Calculate policy grad with mask
         values_taken_reshape = values_taken.reshape(-1, 1).squeeze(1)
-        pi_taken = torch.gather(actor_out, dim=-1, index=index_acts).squeeze(1)
+        pi_taken = torch.gather(actor_out, dim=-1, index=index_acts).reshape(-1, 1).squeeze(1)  # 10, 8, 2
+        pi_taken[actor_mask == 0] = 1.0
+
         log_pi_taken = torch.log(pi_taken)
 
         # advantage
-        advantage = (values_taken_reshape - baseline).detach()
+        advantage = (values_taken_reshape - baseline).detach()  # 160
 
         entropy = torch.sum(pi * torch.log(pi + 1e-10), dim=-1)
 
         actor_loss = (
-                -(advantage * log_pi_taken + self.entropy_coef * entropy)
-                .sum(dim=2).mean()
-        )
+                -((advantage * log_pi_taken + self.entropy_coef * entropy) * actor_mask).sum()
+                / actor_mask.sum()
+                    )
 
         self.actor_optimizer.zero_grad()
         actor_loss.backward()
