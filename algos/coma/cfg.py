@@ -1,12 +1,12 @@
 
 model_cfgs = dict(
     optimizer="Adam",
-    lr=3.e-4,
+    lr=0.0003,
     grad_clip=False,
     gamma=0.99,
-    entropy_coef=0.01,
+    entropy_coef=0.001,
     value_loss_coef=0.5,
-    centralised=True
+    centralised=False
 )
 
 train_cfgs = dict(
@@ -17,7 +17,7 @@ train_cfgs = dict(
 
 env_cfgs = dict(
     n_steps=10,
-    total_steps=100_000,
+    total_steps=20_050_000,
     eval_interval_steps=10_000,
     eval_episodes=10_000,
 )

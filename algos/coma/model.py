@@ -36,7 +36,8 @@ class CriticFCNetwork(nn.Module):
     def forward(self, x):
         x = F.relu(self.fc1(x))
         x = F.relu(self.fc2(x))
-        return self.fc3(x)
+        q = self.fc3(x)
+        return q
 
 
 class RNNAgent(nn.Module):
@@ -54,35 +55,35 @@ class RNNAgent(nn.Module):
 
         self.device = device
         self.hidden_dim = hidden_dim[0]
-        self.hidden_states = None
 
     def init_hidden(self, batch_size, n_agents):
         # make hidden states on same device as model
         hidden_states = self.fc1.weight.new(1, self.hidden_dim).zero_()
-        self.hidden_states = hidden_states.unsqueeze(0).expand(batch_size, n_agents, -1)
+        hidden_states = hidden_states.unsqueeze(0).expand(batch_size, n_agents, -1)  # 8, 2, 64
+        return hidden_states
 
-    def forward(self, inputs):
+    def forward(self, inputs, init_h):
 
         batch_size, _ = inputs.shape
 
         build_inputs = self.build_actor_input(inputs)
         x = F.relu(self.fc1(build_inputs))
-        h_in = self.hidden_states.reshape(-1, self.hidden_dim)
-        h = self.rnn(x, h_in)
+        h_in = init_h.reshape(-1, self.hidden_dim)
+        h = self.rnn(x, h_in)  # (16, 64) (16, 64)
         q = self.fc2(h)
 
         # policy_logit for choose action
         action_pi = F.softmax(q, dim=-1)
         action_pi = action_pi.view(batch_size, self.n_agents, -1)
-        return action_pi, self.hidden_states
+        return action_pi, h
 
-    def act(self, inputs):
+    def act(self, inputs, h):
 
-        q, h = self.forward(inputs)
+        q, h = self.forward(inputs, h)
         dist = Categorical(q)
         actions = dist.sample().long()
 
-        return actions
+        return actions, h
 
     def build_actor_input(self, batch_obs):
         batch, _ = batch_obs.shape
@@ -90,9 +91,9 @@ class RNNAgent(nn.Module):
         batch_split_obs = self.split_obs(batch_obs)  # num_agent, batch, feature
         batch_split_obs = torch.cat(batch_split_obs, dim=0)  # num_agent * batch, feature
 
-        # index (8, 2, 2)
-        batch_index = torch.eye(self.n_agents, device=self.device).unsqueeze(0).expand(batch, -1,  -1)
-        batch_index = batch_index.reshape(batch * self.n_agents, -1)  # batch * num_agent , feature
+        # index (2, 8, 2)
+        batch_index = torch.eye(self.n_agents, device=self.device).unsqueeze(1).expand(-1, batch, -1)
+        batch_index = batch_index.reshape(self.n_agents * batch, -1)  # batch * num_agent , feature
 
         inputs = torch.cat([batch_split_obs, batch_index], dim=-1)
 
@@ -127,8 +128,8 @@ class COMA(nn.Module):
 
         lr = cfg.model_cfgs['lr']
 
-        self.critic_optimizer = optimizer(self.critic.parameters(), lr=lr)
-        self.actor_optimizer = optimizer(self.actor.parameters(), lr=lr)
+        self.critic_optimizer = optimizer(list(self.critic.parameters()), lr=lr)
+        self.actor_optimizer = optimizer(list(self.actor.parameters()), lr=lr)
 
         self.target_update_interval_or_tau = 200
 
@@ -173,11 +174,11 @@ class COMA(nn.Module):
         critic_loss.backward()
         self.critic_optimizer.step()
 
-        '''optimize agents(actor)'''
+        '''optimize agents(actor)''' ##TODO obs input 잘들어가는지 확인
         actor_out = []
-        actor.init_hidden(batch_size=batch_size, n_agents=self.n_agents)
+        init_hidden = actor.init_hidden(batch_size=batch_size, n_agents=self.n_agents)
         for i in range(n_steps):
-            agent_outs, hidden_states = actor.forward(batch_obs[i])
+            agent_outs, init_hidden = actor.forward(batch_obs[i], init_hidden)
             actor_out.append(agent_outs)
         actor_out = torch.stack(actor_out, dim=0)  # (10, 8, 2, 5)
 
@@ -215,6 +216,8 @@ class COMA(nn.Module):
         return critic_loss
 
     def build_critic_input(self, batch_obs, batch_act):
+        ## TODO 전체적으로 데이터 순서 지켜서 차원 다 바꿔주기
+        # batch_obs (11, 8, 142) , batch_act (10, 8, 2)
         num_step, batch, _ = batch_act.shape
 
         batch_obs = batch_obs.unsqueeze(2).repeat(1, 1, self.n_agents, 1)  # (11, 8, 142) -> (11, 8, 2, 142)

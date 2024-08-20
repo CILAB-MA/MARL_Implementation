@@ -28,7 +28,7 @@ def train(cfgs):
 
     if cfgs.train_cfgs['use_wandb']:
         wandb_run = start_wandb(cfgs)
-        wandb_run.name = f"ca2c{cfgs.model_cfgs['centralised']}_{run_name}"
+        wandb_run.name = f"ca2c_centralised_{cfgs.model_cfgs['centralised']}_{run_name}"
         wandb.config.update(env_cfgs)
         wandb.config.update(model_cfgs)
         wandb.config.update(train_cfgs)

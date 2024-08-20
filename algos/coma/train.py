@@ -39,7 +39,7 @@ def train(cfgs):
     envs = envs_func.RwareWrapper(envs)
 
     agent = RNNAgent(envs.observation_space, [64, 64], envs.action_space, device)
-    agent.init_hidden(batch_size=cfgs.train_cfgs['num_process'], n_agents=len(envs.observation_space))
+    init_hidden = agent.init_hidden(batch_size=cfgs.train_cfgs['num_process'], n_agents=len(envs.observation_space))
     model = COMA(agent, envs.observation_space, envs.action_space, cfgs, device)
 
 
@@ -66,10 +66,9 @@ def train(cfgs):
         for n in range(cfgs.env_cfgs['n_steps']):
             with torch.no_grad():
                 """actor"""
-                actions = agent.act(batch_obs[n, :, :])
+                actions, init_hidden = agent.act(batch_obs[n, :, :], init_hidden)
 
             obs, reward, done, infos = envs.step(actions.tolist())
-            print('reward', reward)
             done = torch.tensor(done, dtype=torch.float32)
 
             batch_obs[n + 1, :, :] = torch.cat([torch.from_numpy(o) for o in obs], dim=1)
@@ -92,6 +91,8 @@ def train(cfgs):
 
         if cfgs.train_cfgs['use_wandb']:
             wandb.log({'epi_rewards': np.mean(epi_rewards)}, step=step)
+            wandb.log({'epi_rewards(agent0)': np.mean(epi_rewards_0)}, step=step)
+            wandb.log({'epi_rewards(agent1)': np.mean(epi_rewards_1)}, step=step)
             wandb.log({"loss": loss}, step=step)
 
     envs.close()
