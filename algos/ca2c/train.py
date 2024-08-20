@@ -8,15 +8,30 @@ from algos.ca2c.model import ActorCritic
 import numpy as np
 import wandb
 import yaml
+import datetime
+
+
+def start_wandb(cfg):
+    with open("private.yaml") as f:
+        private_info = yaml.load(f, Loader=yaml.FullLoader)
+    wandb.login(key=private_info["wandb_key"])
+    run = wandb.init(project=private_info["project"], entity=private_info["entity"])
+    return run
+
 
 def train(cfgs):
+    train_cfgs = cfgs.train_cfgs
+    env_cfgs = cfgs.env_cfgs
+    model_cfgs = cfgs.model_cfgs
+
+    run_name = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
 
     if cfgs.train_cfgs['use_wandb']:
-        with open("private.yaml") as f:
-            private_info = yaml.load(f, Loader=yaml.FullLoader)
-        wandb.login(key=private_info["wandb_key"])
-        wandb.init(project=private_info["project"], entity=private_info["entity"],
-                   name='"centralised : {{{}}}'.format(cfgs.model_cfgs['centralised']))
+        wandb_run = start_wandb(cfgs)
+        wandb_run.name = f"ca2c{cfgs.model_cfgs['centralised']}_{run_name}"
+        wandb.config.update(env_cfgs)
+        wandb.config.update(model_cfgs)
+        wandb.config.update(train_cfgs)
 
     device = torch.device('cuda:0' if torch.cuda.is_available() else "cpu")
 
@@ -40,6 +55,8 @@ def train(cfgs):
     storage["info"] = deque(maxlen=20)
 
     epi_rewards = deque(maxlen=20)
+    epi_rewards_0 = deque(maxlen=20)
+    epi_rewards_1 = deque(maxlen=20)
 
     for step in tqdm(range(cfgs.env_cfgs['total_steps'] + 1)):
 
@@ -48,7 +65,6 @@ def train(cfgs):
                 actions = model.act(model.split_obs(batch_obs[n, :, :]))
 
             obs, reward, done, infos = envs.step([x.squeeze().tolist() for x in torch.cat(actions, dim=1).split(1, dim=0)])
-            done = torch.tensor(done, dtype=torch.float32)
 
             batch_obs[n + 1, :, :] = torch.cat([torch.from_numpy(o) for o in obs], dim=1)
             batch_act[n, :, :] = torch.cat(actions, dim=1)
@@ -59,6 +75,8 @@ def train(cfgs):
             for info in infos:
                 if "episode_returns" in info:
                     epi_rewards.append(sum(info["episode_returns"]))
+                    epi_rewards_0.append(info["episode_returns"][0])
+                    epi_rewards_1.append(info["episode_returns"][1])
 
         loss = model.update(batch_obs, batch_act, batch_rew, batch_done, step)
 
@@ -67,8 +85,8 @@ def train(cfgs):
 
         if cfgs.train_cfgs['use_wandb']:
             wandb.log({'epi_rewards': np.mean(epi_rewards)}, step=step)
-            wandb.log({"epi_reward(agent0)": epi_rewards[0]}, step=step)
-            wandb.log({"epi_reward(agent1)": epi_rewards[1]}, step=step)
+            wandb.log({"epi_reward(agent0)": np.mean(epi_rewards_0)}, step=step)
+            wandb.log({"epi_reward(agent1)": np.mean(epi_rewards_1)}, step=step)
             wandb.log({"loss": loss}, step=step)
 
     envs.close()
