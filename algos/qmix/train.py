@@ -62,7 +62,8 @@ def train(cfgs):
     
     p_bar = tqdm(range(int(train_cfgs['total_timesteps']/train_cfgs['num_process'])))
     for t in p_bar:
-        obss_tensor = torch.tensor(obss, device=device)
+        obss_np = np.array(obss)
+        obss_tensor = torch.tensor(obss_np, device=device)
         actions = agent.act(obss_tensor)
         
         next_obss, rewards, dones, infos = envs.step(actions)
@@ -102,7 +103,8 @@ def train(cfgs):
                 test_done = False
                 test_rewards_sum = 0
                 while not test_done:
-                    test_obs_tensor = torch.tensor(test_obs, device=device).unsqueeze(1)
+                    test_obs_np = np.array(test_obs)
+                    test_obs_tensor = torch.tensor(test_obs_np, device=device).unsqueeze(1)
                     test_action = agent.act(test_obs_tensor).squeeze()
                     test_next_obs, test_reward, test_done, test_info = test_env.step(test_action)
                     test_done = test_done[0]

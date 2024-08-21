@@ -22,11 +22,19 @@ class QMIXAgent(IDQNAgent):
         self.history = {"loss":[0]}
         self.updates = 0
         
-    
+        self.is_central_reward = env_cfgs['central_reward']
+        
+        self.optimizer = self.optimizer_class(
+            list(self.model.parameters()) + list(self.mixer.parameters()), lr=model_cfgs['lr'],
+        )
+        
     def _compute_loss(self):
         minibatch = self.replay_buffer.sample()
         obss, actions, rewards, next_obss, dones = minibatch
-        
+        if self.is_central_reward:
+            rewards = rewards[0]
+        else:
+            rewards = rewards.sum(dim=0)
         # obs = [batch[f"obs{i}"] for i in range(self.n_agents)]
         # nobs = [batch[f"next_obs{i}"] for i in range(self.n_agents)]
         # action = torch.stack([batch[f"act{i}"].long() for i in range(self.n_agents)])

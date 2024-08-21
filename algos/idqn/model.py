@@ -24,13 +24,7 @@ class QNet(nn.Module):
         for param in self.target_net.parameters():
             param.requires_grad = False
         
-               
-        optimizer = getattr(optim, 'Adam')
-        if type(optimizer) is str:
-            optimizer = getattr(optim, optimizer)
-        self.optimizer = optimizer(self.parameters(), lr=model_cfg['lr'])
-
-    
+   
     def act(self, obss) -> List[int]:
         q_vals = self.critic_net(obss)
         actions = [q.argmax(-1) for q in q_vals] 

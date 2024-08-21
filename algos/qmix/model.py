@@ -37,7 +37,8 @@ class QMIXNet(nn.Module):
             nn.ReLU(),
             nn.Linear(self.embed_dim, 1)
         )
-        
+
+    #QMIX Implementation
     def forward(self, agent_q_vals, states): #(N,B,E), (B,E,hyper_obs)
         agent_q_vals = rearrange(agent_q_vals, "N B E -> B E N")#(B,N,E), (B,E,hyper_obs)
         batch_size = agent_q_vals.size(0)
@@ -58,4 +59,9 @@ class QMIXNet(nn.Module):
         y = torch.bmm(hidden, w_final) + v
         # Reshape and return
         central_q_val = y.view(batch_size, -1)
-        return central_q_val
+        return central_q_val #(B,E)
+
+    #VDN Implementation
+    # def forward(self, agent_q_vals, states): #(N,B,E), (B,E,hyper_obs)
+    #     central_q_val = torch.sum(agent_q_vals, dim=0)
+    #     return central_q_val #(B,E)
