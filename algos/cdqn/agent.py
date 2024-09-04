@@ -7,7 +7,7 @@ class CDQNAgent:
     def __init__(self, qnet: nn.Module, env_cfgs):
         self.qnet = qnet
         self.qnet_target = copy.deepcopy(qnet)
-        self.optimizer = torch.optim.Adam(qnet.parameters(), lr=qnet.lr)
+        self.optimizer = torch.optim.Adam(self.qnet.parameters(), lr=qnet.lr)
         self.env_cfgs = env_cfgs
 
     def act(self, obs):
