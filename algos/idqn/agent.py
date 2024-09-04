@@ -30,6 +30,12 @@ class IDQNAgent:
         self.history = {"loss":[0]}
         self.updates = 0
         
+        optimizer = getattr(optim, 'Adam')
+        if type(optimizer) is str:
+            optimizer = getattr(optim, optimizer)
+        self.optimizer_class = optimizer
+        self.optimizer = optimizer(self.model.parameters(), lr=model_cfgs['lr'])
+        
     def update_buffer(self, obss, actions, rewards, next_obss, dones) -> bool:
         self.replay_buffer.append(obss, actions, rewards, next_obss, dones)
         return self.replay_buffer.is_full()
@@ -51,9 +57,9 @@ class IDQNAgent:
         obss, actions, rewards, next_obss, dones = minibatch
 
         
-        expected_q_vals = torch.stack(self.model.critic_net(obss)).gather(3, actions).squeeze(3)
+        expected_q_vals = self.model.critic_net(obss).gather(3, actions).squeeze(3)
         with torch.no_grad():
-            target_q_vals = torch.stack(self.model.target_net(next_obss)).max(dim=3)[0] * (1-dones)
+            target_q_vals = self.model.target_net(next_obss).max(dim=3)[0] * (1-dones)
             target_q_vals = rewards + self.gamma * target_q_vals
         loss = F.mse_loss(expected_q_vals, target_q_vals)
         
@@ -67,10 +73,10 @@ class IDQNAgent:
         self.epsilon_scheduler.step()
         loss = self._compute_loss()
 
-        self.model.optimizer.zero_grad()
+        self.optimizer.zero_grad()
         loss.backward()
     
-        self.model.optimizer.step()
+        self.optimizer.step()
         
         self.update_from_target()
                 
